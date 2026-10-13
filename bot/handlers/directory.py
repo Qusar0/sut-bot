@@ -188,7 +188,10 @@ async def teacher_profile(
     await cb.answer()
     prof = await staff.profile(t.full_name)
     if prof is None:
-        text = f"<b>👤 {escape(t.full_name)}</b>\n\nПрофиля на сайте sut.ru не нашлось."
+        text = (
+            f"<b>👤 {escape(t.full_name)}</b>\n\nНа сайте sut.ru нет страницы этого преподавателя "
+            "(так бывает, например, у совместителей)."
+        )
         if not await staff.count():
             text += "\n<i>Список преподавателей ещё собирается, попробуйте позже.</i>"
         await cb.message.answer(text)

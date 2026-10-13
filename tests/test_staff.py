@@ -67,3 +67,25 @@ async def test_staff_service():
     assert (await svc.profile("громов владислав витальевич")).full_name  # из кэша, без запроса
     assert client.calls == calls
     assert await svc.profile("Несуществующий Преподаватель") is None
+
+
+async def test_fuzzy_match():
+    from bot.db.base import init_db
+
+    await init_db()
+    svc = StaffService(FakeClient())
+    await svc.refresh_lists()
+    from bot.db.base import Session
+
+    async with Session() as s:
+        assert (await svc._find(s, "Климов Алексей -")).full_name == "Климов Алексей Михайлович"
+        assert (await svc._find(s, "Громов В. В.")).full_name == "Громов Владислав Витальевич"
+        assert await svc._find(s, "Громов") is None  # одной фамилии мало
+
+
+def test_clean_person():
+    from bot.services.directory import short_name
+    from bot.services.sut_public.parser import clean_person
+
+    assert clean_person("Климов Алексей -") == "Климов Алексей"
+    assert short_name("Климов Алексей -") == "Климов А."

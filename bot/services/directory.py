@@ -22,7 +22,7 @@ def normalize(s: str) -> str:
 
 def short_name(full: str) -> str:
     """«Кокорин Михаил Станиславович» → «Кокорин М.С.»"""
-    parts = full.split()
+    parts = [p for p in full.split() if any(ch.isalpha() for ch in p)]
     if len(parts) < 2:
         return full
     return parts[0] + " " + "".join(p[0] + "." for p in parts[1:3])
@@ -59,7 +59,18 @@ class Directory:
         self._loaded = False
 
     async def load(self) -> None:
+        from bot.services.sut_public.parser import clean_person
+
         async with Session() as s:
+            # разовая чистка имён из старых версий парсера («Климов Алексей -» → «Климов Алексей»)
+            teachers = (await s.execute(select(Teacher))).scalars().all()
+            names = {t.full_name for t in teachers}
+            for t in teachers:
+                clean = clean_person(t.full_name)
+                if clean != t.full_name and clean not in names:
+                    t.full_name, t.short_name = clean, short_name(clean)
+                    names.add(clean)
+            await s.commit()
             for t in (await s.execute(select(Teacher))).scalars():
                 self._teachers[t.full_name] = t
                 self._teachers_by_id[t.id] = t

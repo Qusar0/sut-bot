@@ -59,10 +59,30 @@ class StaffService:
                     row.position, row.url, row.listed_at = c.position, c.url, now
             await s.commit()
 
-    async def profile(self, full_name: str) -> S.Profile | None:
+    async def _find(self, s, full_name: str) -> StaffProfile | None:
+        """Точное совпадение ФИО, иначе — единственный преподаватель с той же фамилией и именем.
+
+        В расписании часто нет отчества («Климов Алексей») или стоят инициалы («Аль-Свейти Малик А. М.»).
+        """
         key = normalize(full_name)
+        if (row := await s.get(StaffProfile, key)) is not None:
+            return row
+        words = [w.rstrip(".") for w in key.replace(".", ". ").split() if any(ch.isalpha() for ch in w)]
+        if len(words) < 2:
+            return None
+        surname = words[0]
+        rows = (await s.execute(select(StaffProfile).where(StaffProfile.key.like(surname + " %")))).scalars().all()
+
+        def fits(row: StaffProfile) -> bool:
+            have = row.key.split()
+            return len(have) >= len(words) and all(h.startswith(w) for h, w in zip(have[1:], words[1:], strict=False))
+
+        found = [r for r in rows if fits(r)]
+        return found[0] if len(found) == 1 else None
+
+    async def profile(self, full_name: str) -> S.Profile | None:
         async with Session() as s:
-            row = await s.get(StaffProfile, key)
+            row = await self._find(s, full_name)
             if row is None:
                 return None
             fresh = row.fetched_at and datetime.now(TZ) - row.fetched_at.astimezone(TZ) < PROFILE_TTL

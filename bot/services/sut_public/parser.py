@@ -32,6 +32,11 @@ def parse_groups(html: str) -> list[Group]:
     return list(groups.values())
 
 
+def clean_person(name: str) -> str:
+    """«Климов Алексей -» → «Климов Алексей»: убираем слова без букв (прочерки, точки)."""
+    return " ".join(w for w in name.split() if any(ch.isalpha() for ch in w))
+
+
 def _split_room(raw: str) -> tuple[str, str]:
     raw = re.sub(r"^ауд\.?:?\s*", "", raw.strip(), flags=re.I)
     room, _, building = raw.partition(";")
@@ -78,7 +83,7 @@ def parse_week(html: str, group_id: int, any_day: date) -> Week:
                         kind=_text(node.css_first(".vt243")),
                         room=room,
                         building=building,
-                        teachers=tuple(t.strip() for t in full.split(";") if t.strip()),
+                        teachers=tuple(n for t in full.split(";") if (n := clean_person(t))),
                         teachers_short=_text(teacher),
                     )
                 )
