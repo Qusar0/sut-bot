@@ -328,11 +328,11 @@ class Jobs:
         sch.add_job(timed("проверка изменений", self.check_changes), cron(hour="7-22", minute="*/30"), **opts)
         if self.lk is not None:
             sch.add_job(timed("синхронизация ЛК", self.sync_lk), cron(hour="7-22", minute="*/15"), **opts)
-            # автоотметка: пары начинаются в :00 и :45, кнопка живёт ~10 мин — проверяем каждые 2 минуты
+            # автоотметка: кнопка живёт ~10 мин — проверяем каждую минуту, чтобы отметить сразу
             sch.add_job(
                 timed("автоотметка", self.auto_attendance),
-                cron(hour="8-20", minute="*/2"),
-                **{**opts, "misfire_grace_time": 60},
+                cron(hour="8-20", minute="*"),
+                **{**opts, "misfire_grace_time": 50},
             )
         sch.start()
         return sch
