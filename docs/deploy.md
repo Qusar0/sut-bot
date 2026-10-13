@@ -54,3 +54,17 @@ cd /opt/sut-bot && git pull && docker compose up -d --build
 docker compose exec -T postgres pg_dump -U sutbot sutbot | gzip > /opt/backup/sutbot-$(date +%F).sql.gz
 ```
 Положить в cron раз в сутки.
+
+## 6. Автоматическая выкладка из CI
+
+После зелёных проверок в `main` GitHub Actions заходит на сервер по SSH и выполняет `git reset --hard origin/main`
+и `docker compose up -d --build`. Включение:
+
+1. На сервере создать пользователя для деплоя с доступом к Docker и к `/opt/sut-bot`, сгенерировать ключ:
+   `ssh-keygen -t ed25519 -f deploy_key -N ""`, публичную часть добавить в `~/.ssh/authorized_keys`.
+2. В репозитории: Settings → Secrets and variables → Actions:
+   - Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (приватный ключ), при необходимости `DEPLOY_PORT`;
+   - Variables: `DEPLOY_ENABLED=true`, при необходимости `DEPLOY_PATH`.
+3. Settings → Environments → создать `production` (можно включить ручное подтверждение выкладки).
+
+`.env` на сервере CI не трогает — он живёт только там.

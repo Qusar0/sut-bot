@@ -84,10 +84,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Разворачивание на сервер добавим позже: сборка Docker-образа и выкладка при пуше в main.
-  # deploy:
-  #   needs: [lint, test]
-  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #   runs-on: ubuntu-latest
-  #   environment: production
-  #   steps: ...
+  deploy:
+    name: Выкладка на сервер
+    needs: [lint, test, test-postgres, docker]
+    # включается переменной репозитория DEPLOY_ENABLED=true (Settings → Secrets and variables → Actions → Variables)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: deploy-production
+    steps:
+      - name: Обновить и перезапустить бота по SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ vars.DEPLOY_PATH || '/opt/sut-bot' }}
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            docker compose up -d --build --remove-orphans
+            docker image prune -f > /dev/null
+            sleep 15
+            curl -fsS http://127.0.0.1:8080/health
