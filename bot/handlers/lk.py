@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.keyboards.main import Btn, lk_back, lk_cabinet, lk_link_offer, lk_unlink_confirm
+from bot.keyboards.main import Btn, lk_auto_confirm, lk_back, lk_cabinet, lk_link_offer, lk_unlink_confirm
 from bot.render import lk as R
 from bot.services.lk.client import LkAuthError, LkBlockedError, LkUnavailable
 from bot.services.lk.service import LkService, NotLinked
@@ -219,6 +219,41 @@ async def att_mark(cb: CallbackQuery, lk: LkService) -> None:
         await cb.message.answer(UNAVAILABLE)
         return
     await cb.message.answer(f"✅ {escape(result or 'Готово')}", reply_markup=lk_back())
+
+
+# --- автоотметка (п. 36) ---
+
+
+@router.callback_query(F.data == "lk:auto")
+async def auto_toggle(cb: CallbackQuery, lk: LkService) -> None:
+    acc = await lk.account(cb.from_user.id)
+    if acc is None:
+        await cb.answer("Кабинет не подключён", show_alert=True)
+        return
+    if acc.auto_attendance:
+        await lk.set_auto(cb.from_user.id, False)
+        await cb.answer("Автоотметка выключена")
+        await _show_cabinet(cb.message, lk)
+        return
+    await cb.answer()
+    await cb.message.answer(
+        "<b>Включить автоотметку?</b>\n\n"
+        "Бот будет сам нажимать «Начать занятие» в начале каждой пары, пока доступна кнопка.\n\n"
+        "⚠️ Это действие в ЛК от вашего имени. Ответственность за соблюдение правил вуза о "
+        "посещаемости остаётся на вас.",
+        reply_markup=lk_auto_confirm(),
+    )
+
+
+@router.callback_query(F.data == "lk:auto:on")
+async def auto_on(cb: CallbackQuery, lk: LkService) -> None:
+    await lk.set_auto(cb.from_user.id, True)
+    await cb.answer("Автоотметка включена")
+    try:
+        await cb.message.edit_text("✅ Автоотметка включена. Отмечу вас на ближайших парах.")
+    except TelegramBadRequest:
+        pass
+    await _show_cabinet(cb.message, lk)
 
 
 # --- отключение ---

@@ -250,7 +250,7 @@ def lk_link_offer() -> InlineKeyboardMarkup:
     )
 
 
-def lk_cabinet() -> InlineKeyboardMarkup:
+def lk_cabinet(auto_on: bool = False) -> InlineKeyboardMarkup:
     rows, row = [], []
     for title, name in LK_SECTIONS:
         row.append(InlineKeyboardButton(text=title, callback_data=f"lk:sec:{name}"))
@@ -260,8 +260,19 @@ def lk_cabinet() -> InlineKeyboardMarkup:
     if row:
         rows.append(row)
     rows.append([InlineKeyboardButton(text="✅ Отметиться на паре", callback_data="lk:att")])
+    auto = "✅ Автоотметка: вкл" if auto_on else "☑️ Автоотметка: выкл"
+    rows.append([InlineKeyboardButton(text=auto, callback_data="lk:auto")])
     rows.append([InlineKeyboardButton(text="🔌 Отключить кабинет", callback_data="lk:unlink")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def lk_auto_confirm() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Да, включить автоотметку", callback_data="lk:auto:on")],
+            [InlineKeyboardButton(text="Отмена", callback_data="lk:menu")],
+        ]
+    )
 
 
 def lk_back() -> InlineKeyboardMarkup:

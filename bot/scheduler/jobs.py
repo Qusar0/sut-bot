@@ -261,6 +261,23 @@ class Jobs:
         if cold and ids:
             self._cold_done = today_str
 
+    # --- автоотметка (п. 36) ---
+
+    async def auto_attendance(self) -> None:
+        if self.lk is None:
+            return
+        if today().weekday() == 6:
+            return
+        for tg_id in await self.lk.auto_ids():
+            try:
+                marked = await self.lk.auto_mark(tg_id)
+            except Exception:
+                log.warning("автоотметка %s не удалась", tg_id)
+                continue
+            for subject in marked:
+                metrics.inc("ЛК: автоотметка")
+                await self.bc.send(tg_id, f"✅ <b>Автоотметка</b>: {subject}", disable_notification=is_quiet_time())
+
     # --- запуск ---
 
     async def startup(self) -> None:
@@ -311,5 +328,11 @@ class Jobs:
         sch.add_job(timed("проверка изменений", self.check_changes), cron(hour="7-22", minute="*/30"), **opts)
         if self.lk is not None:
             sch.add_job(timed("синхронизация ЛК", self.sync_lk), cron(hour="7-22", minute="*/15"), **opts)
+            # автоотметка: пары начинаются в :00 и :45, кнопка живёт ~10 мин — проверяем каждые 2 минуты
+            sch.add_job(
+                timed("автоотметка", self.auto_attendance),
+                cron(hour="8-20", minute="*/2"),
+                **{**opts, "misfire_grace_time": 60},
+            )
         sch.start()
         return sch

@@ -158,3 +158,24 @@ async def test_sync_detects_new(_fake_session):
     assert first == {}  # первый снимок — без уведомлений
     second = await svc.sync(5002, ("diary",))
     assert second == {}  # данные те же — нового нет
+
+
+async def test_auto_attendance(_fake_session):
+    from bot.db.base import init_db
+    from bot.services.users import get_or_create_user
+
+    await init_db()
+    await get_or_create_user(5003)
+    svc = S.LkService()
+    await svc.link(5003, "l@sut.ru", "right")
+
+    assert await svc.auto_ids() == []  # по умолчанию выключено
+    await svc.set_auto(5003, True)
+    assert 5003 in await svc.auto_ids()
+
+    # в SCHEDULE_HTML одна пара готова к отметке (knop20 «Отметиться»), другая уже начата
+    marked = await svc.auto_mark(5003)
+    assert marked == ["Физика"]
+
+    await svc.set_auto(5003, False)
+    assert await svc.auto_ids() == []

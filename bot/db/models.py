@@ -169,6 +169,8 @@ class LkAccount(Base):
     status: Mapped[str] = mapped_column(String(16), default="ok")  # ok | auth_failed | error
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str] = mapped_column(String(256), default="")
+    # автоотметка (п. 36): бот сам нажимает «Начать занятие» в начале пары. Только по согласию пользователя.
+    auto_attendance: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
 
 
 class LkSnapshot(Base):

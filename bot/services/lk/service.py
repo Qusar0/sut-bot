@@ -261,6 +261,39 @@ class LkService:
             raw = await sess.post("project/cabinet/forms/raspisanie.php", {"open": "3", "rasp": rasp})
         return P.parse_mark_result(raw)
 
+    async def set_auto(self, tg_id: int, on: bool) -> None:
+        async with Session() as s:
+            acc = await s.get(LkAccount, tg_id)
+            if acc is not None:
+                acc.auto_attendance = on
+                await s.commit()
+
+    async def auto_ids(self) -> list[int]:
+        from sqlalchemy import select
+
+        async with Session() as s:
+            q = select(LkAccount.tg_id).where(LkAccount.auto_attendance.is_(True), LkAccount.status != "auth_failed")
+            return [r[0] for r in await s.execute(q)]
+
+    async def auto_mark(self, tg_id: int) -> list[str]:
+        """Автоотметка (п. 36): отмечает все пары, у которых кнопка готова и занятие ещё не начато.
+
+        Возвращает названия отмеченных пар. Делается от имени студента по его согласию.
+        """
+        try:
+            lessons = await self.lk_schedule(tg_id)
+        except LkError:
+            return []
+        marked = []
+        for l in lessons:
+            if l.button_ready and not l.started:
+                try:
+                    await self.mark_attendance(tg_id, l.rasp)
+                    marked.append(l.subject)
+                except LkError:
+                    continue
+        return marked
+
     async def mark_attendance(self, tg_id: int, rasp: str, week: str = "") -> str:
         """Нажимает «Начать занятие» (open=1) от имени студента. Возвращает текст результата."""
         async with self._lock(tg_id):
