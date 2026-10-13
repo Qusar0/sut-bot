@@ -104,6 +104,14 @@ def settings_kb(user: User) -> InlineKeyboardMarkup:
             toggle(user.notify_tomorrow, "Расписание на завтра (20:00)", "notify_tomorrow"),
             toggle(user.notify_week, "Расписание на неделю (вс 18:00)", "notify_week"),
             toggle(user.notify_changes, "Изменения в расписании", "notify_changes"),
+            [
+                InlineKeyboardButton(
+                    text=f"⏰ Перед парой: {f'за {user.remind_minutes} мин' if user.remind_minutes else 'выкл'}",
+                    callback_data="set:remind_minutes",
+                )
+            ],
+            toggle(user.morning_digest, "Утренняя сводка (7:30)", "morning_digest"),
+            toggle(user.quiet_hours, "Тихие часы 23:00–7:00 (без звука)", "quiet_hours"),
             [InlineKeyboardButton(text="📅 Экспорт в календарь", callback_data="cal:menu")],
             [InlineKeyboardButton(text="🔁 Сменить группу", callback_data="set:group")],
         ]

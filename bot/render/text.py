@@ -203,3 +203,19 @@ def render_diff(group_name: str, diff: Diff) -> str:
         out.append("\n".join(lines))
     text = "\n\n".join(out)
     return text if len(text) <= MAX_LEN else text[: MAX_LEN - 20] + "\n…"
+
+
+# --- напоминание (п. 51) ---
+
+
+def render_reminder(lessons: list[Lesson], minutes: int) -> str:
+    """«Через 15 минут» + пары, которые начинаются (подгруппы — списком)."""
+    first = lessons[0]
+    head = f"⏰ <b>Через {minutes} мин</b> · {first.start}–{first.end}"
+    items = []
+    for l in lessons:
+        line = f"{kind_mark(l.kind)} <b>{escape(l.subject)}</b>"
+        if details := _details(l):
+            line += f"\n      └ {details}"
+        items.append(line)
+    return head + "\n\n" + "\n".join(items)

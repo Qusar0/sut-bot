@@ -13,6 +13,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import false as sa_false
+from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bot.db.base import Base
@@ -28,6 +30,10 @@ class User(Base):
     notify_tomorrow: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_week: Mapped[bool] = mapped_column(Boolean, default=True)
     notify_changes: Mapped[bool] = mapped_column(Boolean, default=True)
+    # п. 51: напоминание за N минут до пары (0 — выкл), утренняя сводка, тихие часы (ночью без звука)
+    remind_minutes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    morning_digest: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa_false())
+    quiet_hours: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa_true())
     blocked: Mapped[bool] = mapped_column(Boolean, default=False)  # пользователь заблокировал бота
 
 
