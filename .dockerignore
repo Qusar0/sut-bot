@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.env
+.env.*
+!.env.example
+data
+tests
+docs
+**/__pycache__
+*.pyc
+*.log
+*.db*
+*.har
