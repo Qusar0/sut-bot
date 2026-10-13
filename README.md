@@ -30,7 +30,8 @@ cp .env.example .env          # впишите BOT_TOKEN от @BotFather
 python -m bot
 ```
 
-Тесты: `pytest`.
+Для разработки: `pip install -r requirements-dev.txt`, затем `pytest` и `ruff check .`.
+При каждом push и pull request GitHub Actions запускает линтер и тесты (`.github/workflows/ci.yml`).
 
 ## Как устроено
 

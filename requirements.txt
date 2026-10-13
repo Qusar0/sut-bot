@@ -6,5 +6,3 @@ aiosqlite>=0.20
 pydantic-settings>=2.3
 APScheduler>=3.10,<4
 tzdata
-pytest>=8
-pytest-asyncio>=0.23
