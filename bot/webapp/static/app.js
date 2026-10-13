@@ -7,7 +7,7 @@ const KIND = { lecture: "ЛЕКЦИЯ", practice: "ПРАКТИКА", lab: "ЛА
 const $ = (id) => document.getElementById(id);
 const view = $("view"), strip = $("strip");
 
-let state = { tab: "day", date: null, me: null };
+let state = { tab: "home", date: null, me: null };
 
 async function api(path, opts = {}) {
   const headers = { "X-Telegram-Init-Data": INIT, ...(opts.headers || {}) };
@@ -31,48 +31,121 @@ function lessonCard(l) {
 function nowHM() { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); }
 function toMin(hm) { const [h, m] = hm.split(":").map(Number); return h * 60 + m; }
 
-// карточка дня в стиле таймлайна: кружок пары, бейдж, «N из M», отсчёт
-function dayLesson(l, isToday) {
-  const cnt = l.of ? `<span class="count">${l.num} из ${l.of}</span>` : "";
-  const rows = [
-    l.teachers && `<div class="lrow">👤 ${esc(l.teachers)}</div>`,
-    l.room && `<div class="lrow">📍 ${esc(l.room)}</div>`,
-  ].filter(Boolean).join("");
-  let foot = "";
-  if (isToday) {
-    const s = toMin(l.start), e = toMin(l.end), n = nowHM();
-    if (n < s && s - n <= 90) foot = `<div class="foot soon">⏳ через ${s - n} мин</div>`;
-    else if (n >= s && n < e) foot = `<div class="foot now">● идёт · ещё ${e - n} мин</div>`;
+// показ/скрытие шапок
+function chrome({ hero = false, header = false, showStrip = false } = {}) {
+  $("top").innerHTML = "";
+  $("hdr").style.display = header ? "" : "none";
+  if (!showStrip) strip.innerHTML = "";
+}
+
+// группируем подгруппы одной пары (одно время) в один блок
+function groupSlots(lessons) {
+  const map = new Map();
+  for (const l of lessons) {
+    const k = l.pair + "|" + l.start + "|" + l.end;
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(l);
   }
-  return `<div class="tl ${l.kind_key} ${foot.includes("now") ? "active" : ""}">
-    <div class="tlleft"><div class="circle">${esc(l.pair)}</div><div class="tltime">${l.start}<br><span>${l.end}</span></div></div>
-    <div class="tlcard"><div class="tlhead"><span class="tag ${l.kind_key}">${KIND[l.kind_key] || esc(l.kind)}</span>${cnt}</div>
-      <div class="subj">${esc(l.subject)}</div>${rows}${foot}</div></div>`;
+  return [...map.values()];
+}
+
+function slotFoot(slot, isToday) {
+  if (!isToday) return "";
+  const s = toMin(slot[0].start), e = toMin(slot[0].end), n = nowHM();
+  if (n < s && s - n <= 90) return `<div class="foot soon">⏳ через ${s - n} мин</div>`;
+  if (n >= s && n < e) return `<div class="foot now">● идёт · ещё ${e - n} мин</div>`;
+  return "";
+}
+
+// карточка слота: кружок пары + одна карточка со всеми подгруппами
+function daySlot(slot, isToday) {
+  const first = slot[0];
+  const cnt = first.of ? `<span class="count">${first.num} из ${first.of}</span>` : "";
+  const foot = slotFoot(slot, isToday);
+  const parts = slot.map((l, i) => {
+    const rows = [
+      l.teachers && `<div class="lrow">👤 ${esc(l.teachers)}</div>`,
+      l.room && `<div class="lrow">📍 ${esc(l.room)}</div>`,
+    ].filter(Boolean).join("");
+    return `${i ? '<div class="divider"></div>' : ""}<div class="subj">${esc(l.subject)}</div>${rows}`;
+  }).join("");
+  return `<div class="tl ${first.kind_key} ${foot.includes("now") ? "active" : ""}">
+    <div class="tlleft"><div class="circle">${esc(first.pair)}</div><div class="tltime">${first.start}<br><span>${first.end}</span></div></div>
+    <div class="tlcard"><div class="tlhead"><span class="tag ${first.kind_key}">${KIND[first.kind_key] || esc(first.kind)}</span>${cnt}</div>
+      ${parts}${foot}</div></div>`;
 }
 
 // --- экраны ---
 
 async function showDay() {
-  spin();
+  chrome({ header: true, showStrip: true }); spin();
   try {
     const d = await api("/api/day" + (state.date ? "?date=" + state.date : ""));
     state.date = d.date;
     $("h-title").textContent = d.title;
     $("h-sub").textContent = d.week_label;
-    const todayIso = state.me.today;
     strip.innerHTML = '<div class="strip">' + d.strip.map((x) => {
       const bars = (x.kinds || []).map((k) => `<i class="bar ${k}"></i>`).join("") || '<i class="bar none"></i>';
       return `<div class="d ${x.active ? "active" : ""}" data-date="${x.date}">
         <small>${x.weekday}</small><b>${x.day}</b><div class="bars">${bars}</div></div>`;
     }).join("") + "</div>";
     strip.querySelectorAll(".d").forEach((el) => el.onclick = () => { state.date = el.dataset.date; showDay(); });
-    const isToday = d.date === todayIso;
-    view.innerHTML = d.lessons.length ? d.lessons.map((l) => dayLesson(l, isToday)).join("") : '<div class="empty">Пар нет 🎉</div>';
+    const isToday = d.date === state.me.today;
+    const slots = groupSlots(d.lessons);
+    view.innerHTML = slots.length ? slots.map((s) => daySlot(s, isToday)).join("") : '<div class="empty">Пар нет 🎉</div>';
+  } catch (e) { handle(e); }
+}
+
+// --- главная (hero) ---
+
+async function showHome() {
+  chrome({ hero: true }); spin();
+  try {
+    const d = await api("/api/day");
+    const name = (tg && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || "";
+    const slots = groupSlots(d.lessons);
+    const n = nowHM();
+    let cur = null, kind = "";
+    for (const s of slots) {
+      const st = toMin(s[0].start), e = toMin(s[0].end);
+      if (n < e) { cur = s; kind = n >= st ? "now" : "next"; break; }
+    }
+    let heroCard = '<div class="nowcard"><div class="subj">На сегодня пар больше нет 🎉</div></div>';
+    if (cur) {
+      const l = cur[0], st = toMin(l.start), e = toMin(l.end);
+      const pct = kind === "now" ? Math.round(100 * (n - st) / (e - st)) : 0;
+      const label = kind === "now" ? `идёт · ещё ${e - n} мин` : `через ${st - n} мин`;
+      const subj = cur.length > 1 ? l.subject.replace(/\s*\(\d+\)$/, "") : l.subject;
+      heroCard = `<div class="nowcard">
+        <div class="bdg"><span class="pill">${KIND[l.kind_key] || esc(l.kind)} · пара ${esc(l.pair)}</span><span>${label}</span></div>
+        <div class="subj">${esc(subj)}</div>
+        <div class="prog"><i style="width:${pct}%"></i><b style="left:${pct}%"></b></div>
+        <div class="ends"><span>${l.start}</span><span>${l.end}</span></div>
+        <div class="info"><span class="chip">📍 ${esc(l.room || "—")}</span><span class="chip">👤 ${esc(l.teachers || "—")}</span></div></div>`;
+    }
+    $("top").innerHTML = `<div class="hero">
+      <div class="top"><div><div class="greet">Привет${name ? ", " + esc(name) : ""}! 👋</div>
+        <div class="meta">${esc(d.title)} · ${state.me.group ? esc(state.me.group.name) : ""}</div></div>
+        <div class="ava">🎓</div></div>
+      <div class="search" id="h-search">🔎 Группа, преподаватель, аудитория…</div>
+      ${heroCard}</div>`;
+    $("h-search").onclick = () => switchTab("search");
+    const tiles = [
+      ["📚", "Предметы", () => switchTab("subjects")],
+      ["🚪", "Аудитории", () => switchTab("search")],
+      ["👩‍🏫", "Преподаватели", () => switchTab("search")],
+      ["📅", "Неделя", () => { state.view = "week"; switchTab("day"); showWeek(); }],
+    ];
+    view.innerHTML = `<div class="block">Быстрый доступ</div>
+      <div class="big" id="h-lk"><div><b>Личный кабинет</b><div class="hint">оценки, сообщения, отметка</div></div><div class="ic">🎓</div></div>
+      <div class="tiles">${tiles.map((t, i) => `<div class="tile" data-i="${i}"><div class="ti">${t[0]}</div><div class="tt">${t[1]}</div></div>`).join("")}</div>`;
+    $("h-lk").onclick = () => { switchTab("settings"); setTimeout(showLK, 0); };
+    view.querySelectorAll(".tile").forEach((el) => el.onclick = () => tiles[+el.dataset.i][2]());
   } catch (e) { handle(e); }
 }
 
 async function showWeek() {
-  spin(); strip.innerHTML = "";
+  chrome({ header: true }); spin();
   try {
     const w = await api("/api/week" + (state.date ? "?date=" + state.date : ""));
     $("h-title").textContent = "Неделя";
@@ -86,28 +159,28 @@ async function showWeek() {
 }
 
 async function showSubjects() {
-  spin(); strip.innerHTML = "";
+  chrome({ header: true }); spin();
   $("h-title").textContent = "Предметы"; $("h-sub").textContent = "текущий семестр";
   try {
     const d = await api("/api/subjects");
     view.innerHTML = d.subjects.map((s) => {
       const pct = s.total ? Math.round(100 * s.passed / s.total) : 0;
       return `<div class="row" data-name="${esc(s.name)}"><div style="flex:1">
-        <div>${esc(s.name)}</div><div class="bar"><i style="width:${pct}%"></i></div></div>
-        <div class="prog">${s.passed}/${s.total}</div></div>`;
+        <div>${esc(s.name)}</div><div class="pbar"><i style="width:${pct}%"></i></div></div>
+        <div class="rowprog">${s.passed}/${s.total}</div></div>`;
     }).join("") || '<div class="empty">Нет данных</div>';
     view.querySelectorAll(".row").forEach((r) => r.onclick = () => showSubject(r.dataset.name));
   } catch (e) { handle(e); }
 }
 
 async function showSubject(name) {
-  spin();
+  chrome({ header: true }); spin();
   try {
     const d = await api("/api/subject?name=" + encodeURIComponent(name));
     $("h-title").textContent = name;
     $("h-sub").textContent = d.teachers.join(", ");
     backButton(showSubjects);
-    const kinds = d.by_kind.map((k) => `<span class="pill">${KIND[k.kind_key]}: ${k.passed}/${k.total}</span>`).join("");
+    const kinds = d.by_kind.map((k) => `<span class="pill2">${KIND[k.kind_key]}: ${k.passed}/${k.total}</span>`).join("");
     const rows = d.lessons.map((l) =>
       `<div class="card ${l.kind_key}" style="padding:8px 12px">
         <span class="time">${l.done ? "✅" : "▫️"} ${l.date.slice(8)}.${l.date.slice(5, 7)} · ${l.start}</span>
@@ -119,7 +192,7 @@ async function showSubject(name) {
 }
 
 async function showSearch() {
-  strip.innerHTML = ""; $("h-title").textContent = "Поиск"; $("h-sub").textContent = "преподаватель или аудитория";
+  chrome({ header: true }); $("h-title").textContent = "Поиск"; $("h-sub").textContent = "преподаватель или аудитория";
   view.innerHTML = '<input id="q" placeholder="Фамилия или номер аудитории" autocomplete="off"><div id="res"></div>';
   const q = $("q"), res = $("res");
   q.focus();
@@ -140,7 +213,7 @@ async function showSearch() {
 }
 
 async function showEntity(kind, id, date) {
-  spin();
+  chrome({ header: true }); spin();
   try {
     const d = await api(`/api/entity/${kind}/${id}` + (date ? "?date=" + date : ""));
     $("h-title").textContent = d.title; $("h-sub").textContent = "";
@@ -161,7 +234,7 @@ async function showEntity(kind, id, date) {
 }
 
 async function showProfile(id) {
-  spin();
+  chrome({ header: true }); spin();
   try {
     const p = await api(`/api/teacher/${id}/profile`);
     backButton(() => showEntity("teacher", id));
@@ -177,7 +250,7 @@ async function showProfile(id) {
 }
 
 async function showSettings() {
-  spin(); strip.innerHTML = "";
+  chrome({ header: true }); spin();
   $("h-title").textContent = "Настройки"; $("h-sub").textContent = state.me.group ? state.me.group.name : "";
   const s = state.me.settings;
   const toggles = [
@@ -187,7 +260,7 @@ async function showSettings() {
     ["morning_digest", "Утренняя сводка"],
     ["quiet_hours", "Тихие часы (ночью без звука)"],
   ];
-  const lkBtn = `<div class="row" id="lk-open"><span>🏛 Личный кабинет</span><span class="prog">оценки, отметка →</span></div>`;
+  const lkBtn = `<div class="row" id="lk-open"><span>🏛 Личный кабинет</span><span class="rowprog">оценки, отметка →</span></div>`;
   view.innerHTML = lkBtn + toggles.map(([f, t]) =>
     `<div class="toggle"><span>${t}</span><div class="sw ${s[f] ? "on" : ""}" data-f="${f}"><i></i></div></div>`).join("") +
     `<div class="toggle"><span>Напоминание перед парой</span><select id="rm" style="width:auto">
@@ -212,7 +285,7 @@ const LK_SECTIONS = [
 ];
 
 async function showLK() {
-  spin(); strip.innerHTML = ""; backButton(() => switchTab("settings"));
+  chrome({ header: true }); spin(); backButton(() => switchTab("settings"));
   $("h-title").textContent = "Личный кабинет"; $("h-sub").textContent = "lk.sut.ru";
   let st;
   try { st = await api("/api/lk/status"); } catch (e) { return handle(e); }
@@ -259,7 +332,7 @@ function lkLinkForm() {
 }
 
 async function lkSection(name, title) {
-  spin(); backButton(showLK); $("h-title").textContent = title;
+  chrome({ header: true }); spin(); backButton(showLK); $("h-title").textContent = title;
   try {
     const d = await api("/api/lk/section?name=" + name);
     view.innerHTML = `<div class="card" style="border:none">${d.html}</div>`;
@@ -269,15 +342,15 @@ async function lkSection(name, title) {
 }
 
 async function lkAttendance() {
-  spin(); backButton(showLK); $("h-title").textContent = "Отметка на паре";
+  chrome({ header: true }); spin(); backButton(showLK); $("h-title").textContent = "Отметка на паре";
   try {
     const d = await api("/api/lk/attendance");
     if (!d.lessons.length) { view.innerHTML = '<div class="empty">Сегодня пар нет.</div>'; return; }
     view.innerHTML = '<div class="note">Кнопка активна за 10 минут до пары. Отметка — действие в ЛК от вашего имени.</div>' +
       d.lessons.map((l) => {
         const st = l.started ? "✅ отмечено" : l.ready ? "" : "⏳ рано";
-        const btn = (!l.started && l.ready) ? `<button class="mk" data-rasp="${l.rasp}">Отметиться</button>` : `<span class="prog">${st}</span>`;
-        return `<div class="row"><div><div>${esc(l.subject)}</div><div class="prog">${esc(l.time)} · ${esc(l.room)}</div></div>${btn}</div>`;
+        const btn = (!l.started && l.ready) ? `<button class="mk" data-rasp="${l.rasp}">Отметиться</button>` : `<span class="rowprog">${st}</span>`;
+        return `<div class="row"><div><div>${esc(l.subject)}</div><div class="rowprog">${esc(l.time)} · ${esc(l.room)}</div></div>${btn}</div>`;
       }).join("");
     view.querySelectorAll(".mk").forEach((b) => b.onclick = async () => {
       b.textContent = "…"; b.disabled = true;
@@ -289,7 +362,7 @@ async function lkAttendance() {
 }
 
 async function chooseGroup() {
-  spin(); backButton(showSettings);
+  chrome({ header: true }); spin(); backButton(showSettings);
   $("h-title").textContent = "Выбор группы";
   view.innerHTML = '<input id="gq" placeholder="Номер группы, напр. ИСТ-2633" autocomplete="off"><div id="gres"></div>';
   const gq = $("gq"), gres = $("gres"); gq.focus();
@@ -298,7 +371,7 @@ async function chooseGroup() {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const d = await api("/api/groups?q=" + encodeURIComponent(gq.value.trim()));
-      gres.innerHTML = d.groups.map((g) => `<div class="row" data-id="${g.id}">${esc(g.name)} <span class="prog">${esc(g.faculty)}</span></div>`).join("");
+      gres.innerHTML = d.groups.map((g) => `<div class="row" data-id="${g.id}">${esc(g.name)} <span class="rowprog">${esc(g.faculty)}</span></div>`).join("");
       gres.querySelectorAll(".row").forEach((r) => r.onclick = async () => {
         await api("/api/group", { method: "POST", body: JSON.stringify({ group_id: +r.dataset.id }) });
         state.me = await api("/api/me"); state.date = null; switchTab("day");
@@ -315,7 +388,7 @@ function backButton(fn) {
   tg.BackButton.onClick(function h() { tg.BackButton.offClick(h); tg.BackButton.hide(); fn(); });
 }
 
-const TABS = { day: showDay, week: showWeek, subjects: showSubjects, search: showSearch, settings: showSettings };
+const TABS = { home: showHome, day: showDay, week: showWeek, subjects: showSubjects, search: showSearch, settings: showSettings };
 function switchTab(tab) {
   state.tab = tab;
   if (tg) tg.BackButton.hide();
@@ -335,6 +408,6 @@ function handle(e) {
     state.me = await api("/api/me");
     if (!state.me.consent) { view.innerHTML = '<div class="empty">Откройте бота командой /start и примите документы, затем вернитесь в приложение.</div>'; strip.innerHTML = ""; return; }
     if (!state.me.group) { chooseGroup(); return; }
-    switchTab("day");
+    switchTab("home");
   } catch (e) { handle(e); }
 })();
