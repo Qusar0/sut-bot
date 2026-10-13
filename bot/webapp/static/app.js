@@ -186,9 +186,36 @@ async function showSubject(name) {
         <span class="time">${l.done ? "✅" : "▫️"} ${l.date.slice(8)}.${l.date.slice(5, 7)} · ${l.start}</span>
         <span class="tag ${l.kind_key}" style="margin-left:6px">${KIND[l.kind_key][0]}</span>
         ${l.room ? `<span class="meta"> · ${esc(l.room)}</span>` : ""}</div>`).join("");
-    view.innerHTML = `<div class="note">Всего ${d.total} · прошло ${d.passed} · впереди ${d.total - d.passed}</div>
+    view.innerHTML = `<div class="seg"><button class="primary" id="go-diary">📔 Оценки и посещаемость</button></div>
+      <div class="note">Всего ${d.total} · прошло ${d.passed} · впереди ${d.total - d.passed}</div>
       <div>${kinds}</div>${rows}`;
+    $("go-diary").onclick = () => openSubjectDiary(name, () => showSubject(name));
   } catch (e) { handle(e); }
+}
+
+function _normSubject(s) {
+  return (s || "").toLowerCase().replace(/ё/g, "е").replace(/\s*\(\d+\)$/, "").replace(/\s+/g, " ").trim();
+}
+
+async function openSubjectDiary(name, back) {
+  chrome({ header: true }); spin(); backButton(back);
+  $("h-title").textContent = name; $("h-sub").textContent = "дневник";
+  try {
+    const d = await api("/api/lk/diary");
+    const n = _normSubject(name);
+    const subj = d.subjects.find((s) => _normSubject(s.name) === n) ||
+      d.subjects.find((s) => _normSubject(s.name).includes(n) || n.includes(_normSubject(s.name)));
+    if (!subj) { view.innerHTML = '<div class="empty">По этому предмету в дневнике пока нет отметок.</div>'; return; }
+    lkSubjectDiary(subj, back);
+  } catch (e) {
+    if (e.code === "no_group") {  // раздел ЛК вернул 409 — кабинет не подключён
+      view.innerHTML = '<div class="empty">Подключите личный кабинет, чтобы видеть оценки и посещаемость.</div>' +
+        '<div class="seg"><button class="primary" id="go-lk">🏛 Подключить кабинет</button></div>';
+      $("go-lk").onclick = () => { switchTab("settings"); setTimeout(showLK, 0); };
+    } else {
+      view.innerHTML = '<div class="empty">Дневник недоступен.</div>';
+    }
+  }
 }
 
 // переключатель «Мои / Все»
@@ -416,8 +443,8 @@ async function lkDiary() {
   } catch (e) { view.innerHTML = e.code === "no_group" ? "" : '<div class="empty">Дневник недоступен.</div>'; }
 }
 
-function lkSubjectDiary(s) {
-  chrome({ header: true }); backButton(lkDiary); $("h-title").textContent = s.name; $("h-sub").textContent = "дневник";
+function lkSubjectDiary(s, back) {
+  chrome({ header: true }); backButton(back || lkDiary); $("h-title").textContent = s.name; $("h-sub").textContent = "дневник";
   const summary = `<div class="note">Оценок: ${s.grades.length} · пропусков (Н): ${s.absences}</div>`;
   const rows = s.entries.map((e) => {
     const [y, m, dd] = e.date.split("-");
