@@ -225,3 +225,15 @@ def render_reminder(lessons: list[Lesson], minutes: int | None) -> str:
             line += f"\n      └ {details}"
         items.append(line)
     return head + "\n\n" + "\n".join(items)
+
+
+def render_diff_short(diff: Diff, limit: int = 900) -> str:
+    """Короткая сводка изменений для подписи к PDF (лимит подписи Telegram — 1024 символа)."""
+    lines = []
+    for d in diff.days:
+        rem = [l for l in diff.removed if l.day == d]
+        add = [l for l in diff.added if l.day == d]
+        parts = [f"➖ {l.start} {escape(l.subject)}" for l in rem] + [f"➕ {l.start} {escape(l.subject)}" for l in add]
+        lines.append(f"<b>{WEEKDAYS_SHORT[d.weekday()]} {d:%d.%m}</b>: " + "; ".join(parts))
+    text = "\n".join(lines)
+    return text if len(text) <= limit else text[: limit - 1] + "…"

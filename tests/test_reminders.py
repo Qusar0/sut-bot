@@ -70,3 +70,35 @@ def test_reminder_lead():
     assert reminder_lead(1500, rate=25) == 0
     assert reminder_lead(1501, rate=25) == 1
     assert reminder_lead(10_000, rate=25) == 6  # 10 000 сообщений идут ~7 минут — начинаем на 6 минут раньше
+
+
+class DocBroadcaster(FakeBroadcaster):
+    def __init__(self):
+        super().__init__()
+        self.docs = []
+
+    async def send_document(self, chat_id, document, **kw):
+        self.docs.append((chat_id, document))
+
+        class Msg:
+            class document:  # noqa: N801
+                file_id = "FILE123"
+
+        return Msg()
+
+
+async def test_changes_pdf_uploaded_once():
+    from dataclasses import replace
+
+    from bot.services.schedule import diff_lessons
+    from bot.services.users import set_user_fields
+
+    for tg in (1001, 1002, 1003):
+        await set_user_fields(tg, notify_changes=True)
+    bc = DocBroadcaster()
+    jobs = Jobs(FakeSchedule(), bc)
+    old = WEEK.lessons
+    diff = diff_lessons(56882, WEEK.monday, old, [replace(old[0], room="999")] + old[1:])
+    await jobs.on_change(diff)
+    assert len(bc.docs) == 3
+    assert not isinstance(bc.docs[0][1], str) and bc.docs[1][1] == "FILE123" and bc.docs[2][1] == "FILE123"

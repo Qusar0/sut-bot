@@ -203,3 +203,82 @@ def lesson_counters(semester_lessons: list[Lesson]) -> Counter:
         for i, k in enumerate(keys, start=1):
             out[k] = (i, len(keys))
     return out
+
+
+# --- изменения расписания в PDF (п. 9) ---
+
+ADDED = ((31, 157, 85), (231, 246, 236))
+REMOVED = ((229, 72, 77), (253, 236, 236))
+
+
+def _change_row_height(l: Lesson) -> int:
+    title = _wrap(l.subject, font(16, True), CARD_W - 2 * INNER)
+    meta = 1 if (l.room or l.teachers_short) else 0
+    return INNER + len(title) * _h(font(16, True)) + meta * _h(font(13)) + INNER
+
+
+def render_changes(group_name: str, added: list[Lesson], removed: list[Lesson]) -> Image.Image:
+    days = sorted({l.day for l in added + removed})
+    rows: list[tuple[str, Lesson | None]] = []  # ("day"|"add"|"del", занятие)
+    for d in days:
+        rows.append(("day", Lesson(d, "", "", "", "", "", "", "", (), "")))
+        rows += [("del", l) for l in sorted(removed, key=lambda x: x.start) if l.day == d]
+        rows += [("add", l) for l in sorted(added, key=lambda x: x.start) if l.day == d]
+
+    header_h = PAD + _h(font(26, True)) + 6 * S + _h(font(15)) + 18 * S
+    body = 0
+    for kind, l in rows:
+        body += (_h(font(18, True)) + 14 * S) if kind == "day" else (_change_row_height(l) + GAP)
+    img = Image.new("RGB", (W, header_h + body + PAD), BG)
+    d = ImageDraw.Draw(img)
+
+    y = PAD
+    d.text((PAD, y), "Изменения в расписании", font=font(26, True), fill=INK)
+    y += _h(font(26, True)) + 6 * S
+    d.text((PAD, y), f"{group_name} · {len(added) + len(removed)} изм.", font=font(15), fill=MUTED)
+    y += _h(font(15)) + 10 * S
+    d.line((PAD, y, W - PAD, y), fill=LINE, width=2 * S)
+    y += 8 * S
+
+    for kind, l in rows:
+        if kind == "day":
+            y += 6 * S
+            d.text(
+                (PAD, y),
+                f"{WEEKDAYS[l.day.weekday()]}, {l.day.day} {MONTHS_GEN[l.day.month - 1]}",
+                font=font(18, True),
+                fill=INK,
+            )
+            y += _h(font(18, True)) + 8 * S
+            continue
+        main, tint = ADDED if kind == "add" else REMOVED
+        h = _change_row_height(l)
+        d.text((PAD, y + INNER), l.start, font=font(15, True), fill=INK)
+        d.text(
+            (PAD, y + INNER + _h(font(15, True))),
+            "добавлено" if kind == "add" else "отменено",
+            font=font(12, True),
+            fill=main,
+        )
+        d.rounded_rectangle((CARD_X, y, CARD_X + CARD_W, y + h), radius=12 * S, fill=tint)
+        d.rounded_rectangle((CARD_X, y, CARD_X + 5 * S, y + h), radius=3 * S, fill=main)
+        ty = y + INNER
+        for line in _wrap(l.subject, font(16, True), CARD_W - 2 * INNER):
+            d.text((CARD_X + INNER, ty), line, font=font(16, True), fill=INK)
+            if kind == "del":  # зачёркиваем отменённое
+                w = font(16, True).getlength(line)
+                mid = ty + int(font(16, True).getmetrics()[0] * 0.62)
+                d.line((CARD_X + INNER, mid, CARD_X + INNER + w, mid), fill=main, width=2 * S)
+            ty += _h(font(16, True))
+        meta = " · ".join(
+            p for p in (f"{kind_short(l.kind)}", f"ауд. {room_short(l)}" if l.room else "", l.teachers_short) if p
+        )
+        d.text((CARD_X + INNER, ty), meta[:80], font=font(13), fill=MUTED)
+        y += h + GAP
+    return img
+
+
+def render_changes_pdf(group_name: str, added: list[Lesson], removed: list[Lesson]) -> bytes:
+    buf = io.BytesIO()
+    render_changes(group_name, added, removed).save(buf, format="PDF", resolution=144)
+    return buf.getvalue()

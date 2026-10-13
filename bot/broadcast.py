@@ -21,22 +21,29 @@ class Broadcaster:
         self._interval = 1 / RATE
 
     async def send(self, chat_id: int, text: str, **kwargs) -> bool:
+        return await self._deliver(self.bot.send_message, chat_id, text, **kwargs) is not None
+
+    async def send_document(self, chat_id: int, document, **kwargs):
+        """Отправляет файл; возвращает сообщение (из него берём file_id для повторной отправки без загрузки)."""
+        return await self._deliver(self.bot.send_document, chat_id, document, **kwargs)
+
+    async def _deliver(self, method, chat_id: int, payload, **kwargs):
         async with self._lock:  # глобальный темп на весь процесс
             await asyncio.sleep(self._interval)
         for _ in range(3):
             try:
-                await self.bot.send_message(chat_id, text, **kwargs)
+                msg = await method(chat_id, payload, **kwargs)
                 metrics.inc("рассылка: отправлено")
-                return True
+                return msg
             except TelegramRetryAfter as e:
                 await asyncio.sleep(e.retry_after + 1)
             except TelegramForbiddenError:
                 await set_user_fields(chat_id, blocked=True)
-                return False
+                return None
             except TelegramBadRequest as e:
                 log.warning("не отправлено %s: %s", chat_id, e)
-                return False
-        return False
+                return None
+        return None
 
     async def send_many(self, chat_ids: list[int], text: str, **kwargs) -> int:
         sent = 0

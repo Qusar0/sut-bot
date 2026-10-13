@@ -6,7 +6,9 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from html import escape
 
+from aiogram.types import BufferedInputFile
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import or_, select
@@ -17,7 +19,8 @@ from bot.config import TZ
 from bot.db.base import Session
 from bot.db.models import User
 from bot.keyboards.main import day_nav, week_nav
-from bot.render.text import render_day, render_diff, render_reminder, render_week
+from bot.render.image import render_changes_pdf
+from bot.render.text import render_day, render_diff, render_diff_short, render_reminder, render_week
 from bot.services.schedule import Diff, ScheduleService, monday_of, today
 from bot.services.users import get_group, groups_count, save_groups
 
@@ -206,12 +209,29 @@ class Jobs:
                     log.warning("проверка изменений: группа %s неделя %s недоступна", gid, m)
 
     async def on_change(self, diff: Diff) -> None:
+        """Изменения (п. 9): PDF с карточкой изменений и коротким текстом; файл загружается один раз."""
         group = await get_group(diff.group_id)
         users = (await _recipients(User.notify_changes.is_(True), User.group_id == diff.group_id)).get(
             diff.group_id, []
         )
-        if users:
+        if not users:
+            return
+        try:
+            pdf = await asyncio.to_thread(render_changes_pdf, group.name, diff.added, diff.removed)
+        except Exception:
+            log.exception("PDF изменений")
             await self._send(users, render_diff(group.name, diff))
+            return
+        n = len(diff.added) + len(diff.removed)
+        caption = f"🔔 <b>Изменения в расписании {escape(group.name)}</b> · {n} изм.\n\n" + render_diff_short(diff)
+        name = f"Изменения-{group.name}-{datetime.now(TZ):%d-%m-%H-%M}.pdf"
+        quiet_now = is_quiet_time()
+        file_ref = None
+        for r in users:
+            doc = file_ref or BufferedInputFile(pdf, filename=name)
+            msg = await self.bc.send_document(r.tg_id, doc, caption=caption, disable_notification=quiet_now and r.quiet)
+            if file_ref is None and msg is not None and msg.document:
+                file_ref = msg.document.file_id
 
     # --- запуск ---
 

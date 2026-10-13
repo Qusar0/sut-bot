@@ -29,3 +29,14 @@ def test_render_day_image():
 def test_render_empty_day():
     png = render_day_image("ИСТ-2633", date(2026, 10, 15), [])
     assert Image.open(io.BytesIO(png)).height < 600
+
+
+def test_changes_pdf():
+    from dataclasses import replace
+
+    from bot.render.image import render_changes_pdf
+
+    old = WEEK.by_day(date(2026, 10, 13))[2]
+    new = replace(old, room="501", start="14:45")
+    pdf = render_changes_pdf("ИСТ-2633", [new], [old])
+    assert pdf.startswith(b"%PDF")
