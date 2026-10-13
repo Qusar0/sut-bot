@@ -72,7 +72,31 @@ docker compose exec -T postgres pg_dump -U sutbot sutbot | gzip > /opt/backup/su
 ```
 Положить в cron раз в сутки.
 
-## 7. Автоматическая выкладка из CI
+## 7. Прокси для sut.ru (если IP сервера заблокирован вузом)
+
+sut.ru может резать TCP 80/443 с зарубежных/хостинговых IP (проверка: `curl --max-time 10 https://www.sut.ru/`
+— таймаут, при этом `ya.ru` открывается). Тогда запросы к sut.ru/lk.sut.ru пускаем через прокси в разрешённой
+сети (sing-box с рабочим VLESS/Reality-конфигом). Поднимается рядом в `docker-compose.proxy.yml`.
+
+```bash
+# из рабочей VLESS-ссылки (один сервер) сделать конфиг sing-box
+mkdir -p /opt/sut-bot/singbox
+python3 /opt/sut-bot/scripts/vless_to_singbox.py "$(cat /opt/sut-bot/proxy.txt)" /opt/sut-bot/singbox/config.json
+```
+
+В `.env` добавить:
+```
+COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
+SUT_PROXY=socks5h://proxy:1080
+```
+Поднять и проверить, что через прокси sut.ru доступен:
+```bash
+cd /opt/sut-bot && docker compose up -d
+docker compose exec proxy sh -c "wget -qO- --timeout=15 https://www.sut.ru/ >/dev/null && echo OK || echo FAIL"
+```
+`singbox/config.json` и `proxy.txt` содержат секрет VPN — в git не попадают (см. `.gitignore`).
+
+## 8. Автоматическая выкладка из CI
 
 После зелёных проверок в `main` GitHub Actions собирает образ, пушит его в GHCR, затем заходит на сервер по SSH и
 выполняет `git reset --hard origin/main`, `docker compose pull` и `docker compose up -d`. Включение:

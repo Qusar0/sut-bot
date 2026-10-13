@@ -7,7 +7,9 @@ TZ = ZoneInfo("Europe/Moscow")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_ignore_empty: пустые значения в .env (например WEBAPP_DEV_USER=) трактуем как «не задано»,
+    # иначе pydantic падает на попытке привести "" к int/None-полю.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     bot_token: SecretStr
     encryption_key: SecretStr | None = None
@@ -37,6 +39,10 @@ class Settings(BaseSettings):
 
     # Mini App: при локальной разработке (с 127.0.0.1) запросы без подписи Telegram считаются от этого tg_id.
     webapp_dev_user: int | None = None
+
+    # Прокси для запросов к sut.ru/lk.sut.ru, если прямой IP сервера заблокирован вузом.
+    # Например socks5h://proxy:1080 (sing-box рядом в docker-compose). Пусто — ходим напрямую.
+    sut_proxy: str | None = None
 
 
 settings = Settings()

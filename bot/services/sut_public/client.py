@@ -38,8 +38,15 @@ class RateLimiter:
 class SutPublicClient:
     """Два независимых темпа: быстрый для запросов пользователей и медленный для фонового обхода."""
 
-    def __init__(self, interval: float = 1.0, interactive_interval: float = 0.2, timeout: float = 20.0):
-        self._http = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True)
+    def __init__(
+        self,
+        interval: float = 1.0,
+        interactive_interval: float = 0.2,
+        timeout: float = 20.0,
+        proxy: str | None = None,
+    ):
+        # proxy — чтобы ходить на sut.ru через разрешённую сеть, если прямой IP сервера заблокирован
+        self._http = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True, proxy=proxy)
         self._bg = RateLimiter(interval)
         self._fg = RateLimiter(interactive_interval)
 

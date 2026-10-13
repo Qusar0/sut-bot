@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from sqlalchemy import delete
 
-from bot.config import TZ
+from bot.config import TZ, settings
 from bot.db.base import Session
 from bot.db.models import LkAccount, LkSnapshot
 from bot.services.lk import parser as P
@@ -107,7 +107,7 @@ class LkService:
 
     async def link(self, tg_id: int, login: str, password: str) -> P.Profile:
         """Проверяет вход и сохраняет учётку. Бросает LkAuthError / LkBlockedError / LkUnavailable."""
-        sess = LkSession(login, password)
+        sess = LkSession(login, password, proxy=settings.sut_proxy)
         try:
             await sess.login()
             profile = await _fetch(sess, "profile")
@@ -167,7 +167,7 @@ class LkService:
         acc = await self.account(tg_id)
         if acc is None:
             raise NotLinked("кабинет не подключён")
-        sess = LkSession(acc.login, decrypt(acc.password_enc))
+        sess = LkSession(acc.login, decrypt(acc.password_enc), proxy=settings.sut_proxy)
         self._sessions[tg_id] = sess
         return sess
 

@@ -48,7 +48,11 @@ async def main() -> None:
         from bot.alerts import TelegramAlertHandler
 
         logging.getLogger().addHandler(TelegramAlertHandler(bot, settings.admin_id))
-    client = SutPublicClient(interval=settings.crawl_delay, interactive_interval=settings.interactive_delay)
+    client = SutPublicClient(
+        interval=settings.crawl_delay,
+        interactive_interval=settings.interactive_delay,
+        proxy=settings.sut_proxy,
+    )
     directory_svc = Directory()
     schedule_svc = ScheduleService(client, directory_svc)
     staff_svc = StaffService(client)

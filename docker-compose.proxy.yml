@@ -1,0 +1,24 @@
+# Прокси для sut.ru через sing-box, когда прямой IP сервера заблокирован вузом.
+# Включается на сервере добавлением в .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
+#   SUT_PROXY=socks5h://proxy:1080
+# Конфиг sing-box кладётся в ./singbox/config.json (генерируется scripts/vless_to_singbox.py,
+# в git не коммитится — там секрет VPN). Локально этот файл не подключается, прокси не запускается.
+services:
+  proxy:
+    image: ghcr.io/sagernet/sing-box:v1.11.15
+    restart: unless-stopped
+    command: ["run", "-c", "/etc/sing-box/config.json"]
+    volumes:
+      - ./singbox/config.json:/etc/sing-box/config.json:ro
+    mem_limit: 90m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  bot:
+    environment:
+      SUT_PROXY: ${SUT_PROXY:-socks5h://proxy:1080}
+    depends_on:
+      proxy:
+        condition: service_started
