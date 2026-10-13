@@ -152,3 +152,32 @@ class StaffProfile(Base):
     data: Mapped[dict | None] = mapped_column(JSON)
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     listed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class LkAccount(Base):
+    """Привязанный личный кабинет (п. 33). Пароль — только в зашифрованном виде."""
+
+    __tablename__ = "lk_accounts"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id", ondelete="CASCADE"), primary_key=True)
+    login: Mapped[str] = mapped_column(String(128))
+    password_enc: Mapped[str] = mapped_column(String(512))
+    fio: Mapped[str] = mapped_column(String(128), default="")
+    group_name: Mapped[str] = mapped_column(String(64), default="")
+    course: Mapped[str] = mapped_column(String(8), default="")
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), default="ok")  # ok | auth_failed | error
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str] = mapped_column(String(256), default="")
+
+
+class LkSnapshot(Base):
+    """Последнее содержимое раздела ЛК пользователя (п. 34) — основа для уведомлений о новом."""
+
+    __tablename__ = "lk_snapshots"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id", ondelete="CASCADE"), primary_key=True)
+    section: Mapped[str] = mapped_column(String(32), primary_key=True)
+    data: Mapped[list | dict] = mapped_column(JSON)
+    digest: Mapped[str] = mapped_column(String(64))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
