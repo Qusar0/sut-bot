@@ -151,7 +151,10 @@ async def section(cb: CallbackQuery, lk: LkService) -> None:
         log.exception("раздел ЛК %s", name)
         await cb.message.answer(UNAVAILABLE)
         return
-    await cb.message.answer(await _render_section(name, data), reply_markup=lk_back(), disable_web_page_preview=True)
+    parts = R.split_sections(await _render_section(name, data))
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        await cb.message.answer(part, reply_markup=lk_back() if last else None, disable_web_page_preview=True)
 
 
 # --- отметка на паре ---

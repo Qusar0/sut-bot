@@ -19,7 +19,21 @@ def _dt(value) -> str:
 
 
 def _clip(text: str) -> str:
-    return text if len(text) <= LIMIT else text[: LIMIT - 1] + "…"
+    # длинные разделы режем не обрезанием, а разбивкой на сообщения (split_sections)
+    return text
+
+
+def split_sections(text: str, limit: int = LIMIT) -> list[str]:
+    """Разбивает длинный раздел по строкам на сообщения ≤ limit (для учебного плана, приказов и т. п.)."""
+    parts, cur = [], ""
+    for line in text.split("\n"):
+        if len(cur) + len(line) + 1 > limit and cur:
+            parts.append(cur)
+            cur = ""
+        cur += (("\n" if cur else "") + line) if len(line) <= limit else line[: limit - 1] + "…"
+    if cur:
+        parts.append(cur)
+    return parts or [text]
 
 
 def render_messages(items: list[P.Message]) -> str:
