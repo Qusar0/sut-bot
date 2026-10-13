@@ -12,7 +12,8 @@ class Base(DeclarativeBase):
 
 
 _is_sqlite = settings.database_url.startswith("sqlite")
-_pool = {} if _is_sqlite else {"pool_size": 20, "max_overflow": 20, "pool_recycle": 1800}
+# пул под небольшой сервер (1 ГБ): немного соединений, не упираемся в Postgres max_connections
+_pool = {} if _is_sqlite else {"pool_size": settings.db_pool_size, "max_overflow": 5, "pool_recycle": 1800}
 engine = create_async_engine(settings.database_url, pool_pre_ping=True, **_pool)
 Session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
