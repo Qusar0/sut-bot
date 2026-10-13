@@ -12,8 +12,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
-
+from bot import metrics
 from bot.config import TZ, settings
 from bot.db.base import Session
 from bot.db.models import WeekSnapshot
@@ -68,24 +67,37 @@ class ScheduleService:
         self.client = client
         self.on_change: ChangeHandler | None = None
         self._inflight: dict[tuple[int, date], asyncio.Future] = {}
+        # Горячий кэш в памяти: (группа, понедельник) -> (неделя, когда получена). Без похода в БД.
+        self._mem: dict[tuple[int, date], tuple[Week, datetime]] = {}
+        self._tasks: set[asyncio.Task] = set()
 
-    async def week(self, group_id: int, day: date, max_age: timedelta | None = None) -> Week:
+    async def week(self, group_id: int, day: date, max_age: timedelta | None = None, background: bool = False) -> Week:
         monday = monday_of(day)
+        key = (group_id, monday)
         max_age = max_age if max_age is not None else timedelta(minutes=settings.schedule_cache_minutes)
+        now = datetime.now(TZ)
+
+        if (hit := self._mem.get(key)) and now - hit[1] < max_age:
+            metrics.inc("кэш: память")
+            return hit[0]
 
         async with Session() as s:
             snap = await s.get(WeekSnapshot, (group_id, monday))
-        if snap and datetime.now(TZ) - snap.fetched_at.astimezone(TZ) < max_age:
-            return _week_from_snapshot(snap)
+        if snap and now - snap.fetched_at.astimezone(TZ) < max_age:
+            metrics.inc("кэш: БД")
+            week = _week_from_snapshot(snap)
+            self._mem[key] = (week, snap.fetched_at.astimezone(TZ))
+            return week
 
-        key = (group_id, monday)
         if key in self._inflight:
+            metrics.inc("кэш: склеенный запрос")
             return await asyncio.shield(self._inflight[key])
+        metrics.inc("кэш: промах")
         fut = asyncio.get_running_loop().create_future()
         self._inflight[key] = fut
         try:
             try:
-                week = await self._refresh(group_id, monday)
+                week = await self._refresh(group_id, monday, background)
             except Exception as e:
                 if not snap:
                     raise
@@ -103,8 +115,8 @@ class ScheduleService:
         finally:
             self._inflight.pop(key, None)
 
-    async def _refresh(self, group_id: int, monday: date) -> Week:
-        week = await self.client.week(group_id, monday)
+    async def _refresh(self, group_id: int, monday: date, background: bool = False) -> Week:
+        week = await self.client.week(group_id, monday, background=background)
         digest = _digest(week.lessons)
         diff = None
         async with Session() as s:
@@ -120,28 +132,29 @@ class ScheduleService:
             snap.digest = digest
             snap.fetched_at = datetime.now(TZ)
             await s.commit()
-        # Об изменениях прошлых недель не сообщаем
+        self._mem[(group_id, monday)] = (week, snap.fetched_at)
+        # Об изменениях прошлых недель не сообщаем. Рассылку запускаем фоном, чтобы не задерживать ответ.
         if diff and self.on_change and monday >= monday_of(today()):
-            try:
-                await self.on_change(diff)
-            except Exception:
-                log.exception("ошибка рассылки изменений")
+            metrics.inc("изменения найдены")
+            task = asyncio.create_task(self._notify(diff))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
         return week
 
-    async def lessons_between(self, group_id: int, start: date, end: date) -> list[Lesson]:
-        """Все занятия группы в интервале дат включительно."""
-        result: list[Lesson] = []
-        monday = monday_of(start)
-        while monday <= end:
-            w = await self.week(group_id, monday)
-            result += [l for l in w.lessons if start <= l.day <= end]
-            monday += timedelta(days=7)
-        return result
+    async def _notify(self, diff: Diff) -> None:
+        try:
+            await self.on_change(diff)
+        except Exception:
+            log.exception("ошибка рассылки изменений")
 
-    async def cached_groups_with_snapshots(self) -> list[int]:
-        async with Session() as s:
-            rows = await s.execute(select(WeekSnapshot.group_id).distinct())
-            return [r[0] for r in rows]
+    async def weeks_between(self, group_id: int, start: date, end: date) -> list[Week]:
+        """Недели, покрывающие интервал; загружаются параллельно."""
+        mondays = []
+        m = monday_of(start)
+        while m <= end:
+            mondays.append(m)
+            m += timedelta(days=7)
+        return list(await asyncio.gather(*(self.week(group_id, m) for m in mondays)))
 
 
 def _week_from_snapshot(snap: WeekSnapshot) -> Week:

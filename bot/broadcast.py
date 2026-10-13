@@ -6,6 +6,7 @@ import logging
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 
+from bot import metrics
 from bot.services.users import set_user_fields
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class Broadcaster:
         for _ in range(3):
             try:
                 await self.bot.send_message(chat_id, text, **kwargs)
+                metrics.inc("рассылка: отправлено")
                 return True
             except TelegramRetryAfter as e:
                 await asyncio.sleep(e.retry_after + 1)

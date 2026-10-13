@@ -6,6 +6,8 @@ from datetime import date
 
 import httpx
 
+from bot import metrics
+
 from .models import Group, Week
 from .parser import parse_groups, parse_week
 
@@ -34,29 +36,37 @@ class RateLimiter:
 
 
 class SutPublicClient:
-    def __init__(self, interval: float = 0.5, timeout: float = 20.0):
-        self._http = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True)
-        self._limiter = RateLimiter(interval)
+    """Два независимых темпа: быстрый для запросов пользователей и медленный для фонового обхода."""
 
-    async def _get(self, params: dict | None = None) -> str:
+    def __init__(self, interval: float = 1.0, interactive_interval: float = 0.2, timeout: float = 20.0):
+        self._http = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True)
+        self._bg = RateLimiter(interval)
+        self._fg = RateLimiter(interactive_interval)
+
+    async def _get(self, params: dict | None = None, background: bool = False) -> str:
+        limiter = self._bg if background else self._fg
         last_exc: Exception | None = None
         for attempt in range(3):
-            await self._limiter.wait()
+            await limiter.wait()
+            t0 = time.perf_counter()
             try:
                 r = await self._http.get(BASE_URL, params=params)
                 r.raise_for_status()
+                metrics.observe("sut.ru: запрос", time.perf_counter() - t0)
                 return r.text
             except httpx.HTTPError as e:
+                metrics.inc("sut.ru: ошибка")
                 last_exc = e
                 await asyncio.sleep(2**attempt)
         raise last_exc  # type: ignore[misc]
 
     async def groups(self) -> list[Group]:
-        return parse_groups(await self._get())
+        return parse_groups(await self._get(background=True))
 
-    async def week(self, group_id: int, any_day: date) -> Week:
-        html = await self._get({"group": group_id, "date": any_day.isoformat()})
-        return parse_week(html, group_id, any_day)
+    async def week(self, group_id: int, any_day: date, background: bool = False) -> Week:
+        html = await self._get({"group": group_id, "date": any_day.isoformat()}, background=background)
+        with metrics.timer("sut.ru: парсинг"):
+            return parse_week(html, group_id, any_day)
 
     async def close(self) -> None:
         await self._http.aclose()

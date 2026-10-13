@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     schedule_cache_minutes: int = 30
     # Пауза между запросами к sut.ru при фоновом обходе, секунды
     crawl_delay: float = 1.0
+    # Пауза между запросами к sut.ru, вызванными действиями пользователей, секунды
+    interactive_delay: float = 0.2
 
 
 settings = Settings()

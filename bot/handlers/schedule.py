@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.handlers.start import ask_group
-from bot.keyboards.main import Btn, day_nav, week_nav
+from bot.keyboards.main import Btn, day_nav, month_calendar, week_nav
 from bot.render.text import render_day, render_period, render_week
 from bot.services.schedule import ScheduleService, monday_of, today
 from bot.services.users import get_group, get_user
@@ -32,8 +32,10 @@ async def _day_text(schedule: ScheduleService, group, day: date) -> str:
     return render_day(group.name, week, day)
 
 
-async def _send_day(message: Message, state: FSMContext, schedule: ScheduleService, day: date) -> None:
-    group = await _group(message.from_user.id)
+async def _send_day(
+    message: Message, state: FSMContext, schedule: ScheduleService, day: date, tg_id: int | None = None
+) -> None:
+    group = await _group(tg_id or message.from_user.id)
     if group is None:
         await ask_group(message, state)
         return
@@ -90,13 +92,28 @@ async def month_msg(message: Message, state: FSMContext, schedule: ScheduleServi
     end = start + timedelta(days=30)
     await message.bot.send_chat_action(message.chat.id, "typing")
     try:
-        lessons = await schedule.lessons_between(group.id, start, end)
+        weeks = await schedule.weeks_between(group.id, start, end)
     except Exception:
         log.exception("расписание на месяц")
         await message.answer(UNAVAILABLE)
         return
-    for part in render_period(group.name, lessons, start, end):
-        await message.answer(part)
+    parts = render_period(group.name, weeks, start, end)
+    lesson_days = {l.day for w in weeks for l in w.lessons if start <= l.day <= end}
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        await message.answer(part, reply_markup=month_calendar(start, end, lesson_days) if last else None)
+
+
+@router.callback_query(F.data.startswith("dn:"))
+async def day_new_cb(cb: CallbackQuery, state: FSMContext, schedule: ScheduleService) -> None:
+    """Нажатие на день в календаре месяца — новым сообщением, чтобы календарь остался."""
+    await cb.answer()
+    await _send_day(cb.message, state, schedule, date.fromisoformat(cb.data[3:]), tg_id=cb.from_user.id)
+
+
+@router.callback_query(F.data == "noop")
+async def noop_cb(cb: CallbackQuery) -> None:
+    await cb.answer()
 
 
 # --- листание (редактируем то же сообщение) ---

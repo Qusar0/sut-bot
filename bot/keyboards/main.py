@@ -121,3 +121,23 @@ def delete_confirm() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Отмена", callback_data="del:no")],
         ]
     )
+
+
+def month_calendar(start: date, end: date, lesson_days: set[date]) -> InlineKeyboardMarkup:
+    """Календарь Пн–Сб: дни с парами кликабельны и открывают расписание дня."""
+    noop = "noop"
+    rows = [[InlineKeyboardButton(text=t, callback_data=noop) for t in ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб")]]
+    monday = start - timedelta(days=start.weekday())
+    while monday <= end:
+        row = []
+        for i in range(6):
+            d = monday + timedelta(days=i)
+            if not start <= d <= end:
+                row.append(InlineKeyboardButton(text=" ", callback_data=noop))
+            elif d in lesson_days:
+                row.append(InlineKeyboardButton(text=str(d.day), callback_data=f"dn:{d.isoformat()}"))
+            else:
+                row.append(InlineKeyboardButton(text="·", callback_data=noop))
+        rows.append(row)
+        monday += timedelta(days=7)
+    return InlineKeyboardMarkup(inline_keyboard=rows)

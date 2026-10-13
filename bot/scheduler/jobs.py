@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import or_, select
 
+from bot import metrics
 from bot.broadcast import Broadcaster
 from bot.config import TZ
 from bot.db.base import Session
@@ -48,7 +49,7 @@ class Jobs:
         for gid, users in (await _users_by_group(User.notify_tomorrow.is_(True))).items():
             group = await get_group(gid)
             try:
-                week = await self.schedule.week(gid, day, max_age=timedelta(hours=2))
+                week = await self.schedule.week(gid, day, max_age=timedelta(hours=2), background=True)
             except Exception:
                 log.exception("рассылка на завтра: группа %s", gid)
                 continue
@@ -62,7 +63,7 @@ class Jobs:
         for gid, users in (await _users_by_group(User.notify_week.is_(True))).items():
             group = await get_group(gid)
             try:
-                week = await self.schedule.week(gid, monday, max_age=timedelta(hours=2))
+                week = await self.schedule.week(gid, monday, max_age=timedelta(hours=2), background=True)
             except Exception:
                 log.exception("рассылка на неделю: группа %s", gid)
                 continue
@@ -76,7 +77,7 @@ class Jobs:
         for gid in groups:
             for m in (monday, monday + timedelta(days=7)):
                 try:
-                    await self.schedule.week(gid, m, max_age=timedelta(minutes=20))
+                    await self.schedule.week(gid, m, max_age=timedelta(minutes=20), background=True)
                 except Exception:
                     log.warning("проверка изменений: группа %s неделя %s недоступна", gid, m)
 
@@ -95,9 +96,25 @@ class Jobs:
     def install(self) -> AsyncIOScheduler:
         sch = AsyncIOScheduler(timezone=TZ)
         opts = {"max_instances": 1, "coalesce": True, "misfire_grace_time": 600}
-        sch.add_job(self.refresh_groups, CronTrigger(hour=4, minute=0, timezone=TZ), **opts)
-        sch.add_job(self.send_tomorrow, CronTrigger(hour=20, minute=0, timezone=TZ), **opts)
-        sch.add_job(self.send_next_week, CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=TZ), **opts)
-        sch.add_job(self.check_changes, CronTrigger(hour="7-22", minute="*/30", timezone=TZ), **opts)
+
+        def timed(name, fn):
+            async def run():
+                with metrics.timer(f"задача: {name}"):
+                    await fn()
+
+            return run
+
+        sch.add_job(timed("список групп", self.refresh_groups), CronTrigger(hour=4, minute=0, timezone=TZ), **opts)
+        sch.add_job(timed("на завтра", self.send_tomorrow), CronTrigger(hour=20, minute=0, timezone=TZ), **opts)
+        sch.add_job(
+            timed("на неделю", self.send_next_week),
+            CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=TZ),
+            **opts,
+        )
+        sch.add_job(
+            timed("проверка изменений", self.check_changes),
+            CronTrigger(hour="7-22", minute="*/30", timezone=TZ),
+            **opts,
+        )
         sch.start()
         return sch
