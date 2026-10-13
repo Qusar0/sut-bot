@@ -43,6 +43,10 @@ async def main() -> None:
     await init_db()
 
     bot = Bot(settings.bot_token.get_secret_value(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    if settings.admin_id:
+        from bot.alerts import TelegramAlertHandler
+
+        logging.getLogger().addHandler(TelegramAlertHandler(bot, settings.admin_id))
     client = SutPublicClient(interval=settings.crawl_delay, interactive_interval=settings.interactive_delay)
     directory_svc = Directory()
     schedule_svc = ScheduleService(client, directory_svc)

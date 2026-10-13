@@ -97,6 +97,7 @@ async def file(cb: CallbackQuery, calendar_feeds: CalendarFeeds) -> None:
     name = "schedule-" + group.name.upper().translate(_TRANSLIT) + ".ics"
     await cb.message.answer_document(
         BufferedInputFile(data, filename=name),
-        caption="Откройте файл — телефон предложит добавить занятия в календарь. "
-        "Это разовый импорт: изменения расписания в него не попадут.",
+        caption="Откройте файл — телефон предложит добавить занятия в календарь.\n\n"
+        "Совет: импортируйте в <b>отдельный календарь</b> — тогда убрать расписание можно одним "
+        "удалением этого календаря. Это разовый импорт: изменения расписания в него не попадут.",
     )

@@ -109,6 +109,10 @@ class ScheduleService:
             try:
                 week = await self._refresh(group_id, monday, background)
             except Exception as e:
+                from bot.services.sut_public.parser import ParseError
+
+                if isinstance(e, ParseError):
+                    log.error("парсер расписания sut.ru сломался (изменилась разметка?): %s", e)
                 if not snap:
                     raise
                 log.warning("sut.ru недоступен, отдаю кэш %s %s: %s", group_id, monday, e)
