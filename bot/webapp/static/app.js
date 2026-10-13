@@ -360,7 +360,7 @@ async function showLK() {
        <div class="sw ${st.auto_attendance ? "on" : ""}" id="lk-auto"><i></i></div></div>` +
     sections +
     `<div class="row" id="lk-unlink"><span>🔌 Отключить кабинет</span></div>`;
-  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : r.dataset.sec === "messages" ? lkMessages() : lkSection(r.dataset.sec, r.textContent)));
+  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : r.dataset.sec === "messages" ? lkMessages() : r.dataset.sec === "record_book" ? lkRecordBook() : lkSection(r.dataset.sec, r.textContent)));
   $("lk-att").onclick = lkAttendance;
   $("lk-unlink").onclick = async () => {
     if (tg && !(await new Promise((res) => tg.showConfirm("Отключить кабинет и удалить его данные?", res)))) return;
@@ -468,6 +468,35 @@ async function lkThread(m) {
       };
     }
   } catch (e) { view.innerHTML = '<div class="empty">Переписка недоступна.</div>'; }
+}
+
+async function lkRecordBook() {
+  chrome({ header: true }); spin(); backButton(showLK); $("h-title").textContent = "📒 Зачётка"; $("h-sub").textContent = "";
+  try {
+    const d = await api("/api/lk/record-book");
+    if (!d.semesters.length) { view.innerHTML = '<div class="empty">Данных нет.</div>'; return; }
+    let openIdx = d.semesters.findIndex((s) => s.done < s.total);
+    if (openIdx < 0) openIdx = d.semesters.length - 1;  // всё сдано — последний
+    view.innerHTML = d.semesters.map((sem, i) => {
+      const open = i === openIdx;  // текущий (первый незавершённый) семестр раскрыт
+      const items = sem.subjects.map((s) => {
+        const mark = s.done
+          ? `<span class="mk-chip ${/\d/.test(s.grade) ? "g" : "e"}">${esc(s.grade)}</span>`
+          : `<span class="rowprog">${esc(s.control) || "ещё будет"}</span>`;
+        return `<div class="rb-item"><span>${s.done ? "✅" : "▫️"} ${esc(s.name)}</span>${mark}</div>`;
+      }).join("");
+      return `<div class="rb-sem">
+        <div class="rb-head" data-i="${i}"><div><b>${esc(sem.title)}</b>
+          <div class="rowprog">сдано ${sem.done} из ${sem.total}</div></div><span class="chev">${open ? "▾" : "▸"}</span></div>
+        <div class="rb-body" data-body="${i}" style="display:${open ? "block" : "none"}">${items}</div></div>`;
+    }).join("");
+    view.querySelectorAll(".rb-head").forEach((h) => h.onclick = () => {
+      const b = view.querySelector(`[data-body="${h.dataset.i}"]`);
+      const open = b.style.display === "none";
+      b.style.display = open ? "block" : "none";
+      h.querySelector(".chev").textContent = open ? "▾" : "▸";
+    });
+  } catch (e) { view.innerHTML = e.code === "no_group" ? "" : '<div class="empty">Зачётка недоступна.</div>'; }
 }
 
 async function lkSection(name, title) {

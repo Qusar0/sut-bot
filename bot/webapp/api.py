@@ -448,6 +448,71 @@ def build_webapp(
                 out.append({"name": name, "entries": entries, "grades": grades, "absences": absences})
             return web.json_response({"subjects": out})
 
+        async def lk_record_book(request: web.Request) -> web.Response:
+            """Зачётка по семестрам: что сдано (из зачётки) и что ещё предстоит (из учебного плана)."""
+            import re as _re
+
+            from bot.services.lk.service import NotLinked
+
+            def norm(s: str) -> str:
+                return _re.sub(r"\s+", " ", (s or "").lower().replace("ё", "е")).strip()
+
+            try:
+                book = await lk.section(request["tg_id"], "record_book")
+                plan = await lk.section(request["tg_id"], "plan")
+            except NotLinked:
+                raise web.HTTPConflict(text="not linked") from None
+            except Exception:
+                raise web.HTTPServiceUnavailable() from None
+
+            # оценка по предмету из зачётки
+            grades: dict[tuple, str] = {}
+            for r in book:
+                g = r.exam or r.credit
+                if g:
+                    grades[(r.course, r.semester, norm(r.subject))] = g
+
+            sems: dict[tuple, list] = {}
+            seen: set[tuple] = set()
+            for p in plan:
+                key = (p.course, p.semester)
+                k = (p.course, p.semester, norm(p.subject))
+                if k in seen:
+                    continue
+                seen.add(k)
+                sems.setdefault(key, []).append(
+                    {
+                        "name": p.subject,
+                        "control": ", ".join(p.control),
+                        "grade": grades.get(k, ""),
+                        "done": bool(grades.get(k)),
+                    }
+                )
+            # предметы из зачётки, которых почему-то нет в плане
+            for (course, semester, _), g in grades.items():
+                key = (course, semester)
+                names = {norm(s["name"]) for s in sems.get(key, [])}
+                for r in book:
+                    if (r.course, r.semester, norm(r.subject)) == (course, semester, _) and norm(
+                        r.subject
+                    ) not in names:
+                        sems.setdefault(key, []).append({"name": r.subject, "control": "", "grade": g, "done": True})
+
+            out = []
+            for (course, semester), subs in sorted(sems.items(), key=lambda x: (x[0][0], x[0][1])):
+                done = sum(s["done"] for s in subs)
+                out.append(
+                    {
+                        "title": f"{course} курс · {semester} семестр",
+                        "course": course,
+                        "semester": semester,
+                        "done": done,
+                        "total": len(subs),
+                        "subjects": sorted(subs, key=lambda s: (not s["done"], s["name"])),
+                    }
+                )
+            return web.json_response({"semesters": out})
+
         async def lk_messages(request: web.Request) -> web.Response:
             """Список переписок (тема, отправитель, дата, есть ли файлы)."""
             from bot.services.lk.service import NotLinked
@@ -538,6 +603,7 @@ def build_webapp(
         r.add_post("/api/lk/unlink", lk_unlink)
         r.add_get("/api/lk/section", lk_section)
         r.add_get("/api/lk/diary", lk_diary)
+        r.add_get("/api/lk/record-book", lk_record_book)
         r.add_get("/api/lk/messages", lk_messages)
         r.add_get("/api/lk/thread", lk_thread)
         r.add_post("/api/lk/reply", lk_reply)
