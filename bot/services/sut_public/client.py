@@ -1,0 +1,61 @@
+"""HTTP-клиент открытого расписания sut.ru с ограничением частоты запросов."""
+import asyncio
+import time
+from datetime import date
+
+import httpx
+
+from .models import Group, Week
+from .parser import parse_groups, parse_week
+
+BASE_URL = "https://www.sut.ru/studentu/raspisanie/raspisanie-zanyatiy-studentov-ochnoy-i-vecherney-form-obucheniya"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/128.0 Safari/537.36",
+    "Accept-Language": "ru-RU,ru;q=0.9",
+}
+
+
+class RateLimiter:
+    """Не чаще одного запроса в `interval` секунд на весь процесс."""
+
+    def __init__(self, interval: float):
+        self.interval = interval
+        self._lock = asyncio.Lock()
+        self._last = 0.0
+
+    async def wait(self) -> None:
+        async with self._lock:
+            delay = self._last + self.interval - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            self._last = time.monotonic()
+
+
+class SutPublicClient:
+    def __init__(self, interval: float = 0.5, timeout: float = 20.0):
+        self._http = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True)
+        self._limiter = RateLimiter(interval)
+
+    async def _get(self, params: dict | None = None) -> str:
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            await self._limiter.wait()
+            try:
+                r = await self._http.get(BASE_URL, params=params)
+                r.raise_for_status()
+                return r.text
+            except httpx.HTTPError as e:
+                last_exc = e
+                await asyncio.sleep(2**attempt)
+        raise last_exc  # type: ignore[misc]
+
+    async def groups(self) -> list[Group]:
+        return parse_groups(await self._get())
+
+    async def week(self, group_id: int, any_day: date) -> Week:
+        html = await self._get({"group": group_id, "date": any_day.isoformat()})
+        return parse_week(html, group_id, any_day)
+
+    async def close(self) -> None:
+        await self._http.aclose()
