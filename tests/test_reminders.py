@@ -3,7 +3,7 @@ from pathlib import Path
 
 from bot.config import TZ
 from bot.render.text import render_reminder
-from bot.scheduler.jobs import Jobs, is_quiet_time
+from bot.scheduler.jobs import Jobs, is_quiet_time, reminder_lead
 from bot.services.sut_public.models import Group
 from bot.services.sut_public.parser import parse_week
 
@@ -38,6 +38,7 @@ def test_render_reminder():
     eng = [l for l in WEEK.by_day(date(2026, 10, 14)) if l.start == "14:45"]
     text = render_reminder(eng, 10)
     assert "Через 10 мин" in text and text.count("Иностранный язык") == 3
+    assert "начало в 14:45" in render_reminder(eng, None)
 
 
 async def test_remind():
@@ -53,12 +54,19 @@ async def test_remind():
     bc = FakeBroadcaster()
     jobs = Jobs(FakeSchedule(), bc)
     # вторник 13.10, первая пара в 13:00: в 12:45 напоминание тем, кто выбрал 15 минут
-    await jobs.remind(datetime(2026, 10, 13, 12, 45, tzinfo=TZ))
+    await jobs.remind(datetime(2026, 10, 13, 12, 45, tzinfo=TZ), wait=True)
     assert [c for c, _, _ in bc.sent] == [1001]
     assert "История России" in bc.sent[0][1] and bc.sent[0][2]["disable_notification"] is False
     bc.sent.clear()
-    await jobs.remind(datetime(2026, 10, 13, 12, 30, tzinfo=TZ))
+    await jobs.remind(datetime(2026, 10, 13, 12, 30, tzinfo=TZ), wait=True)
     assert [c for c, _, _ in bc.sent] == [1003]
     bc.sent.clear()
-    await jobs.remind(datetime(2026, 10, 13, 12, 46, tzinfo=TZ))
+    await jobs.remind(datetime(2026, 10, 13, 12, 46, tzinfo=TZ), wait=True)
     assert bc.sent == []
+
+
+def test_reminder_lead():
+    assert reminder_lead(100) == 0  # успеваем за минуту
+    assert reminder_lead(1500, rate=25) == 0
+    assert reminder_lead(1501, rate=25) == 1
+    assert reminder_lead(10_000, rate=25) == 6  # 10 000 сообщений идут ~7 минут — начинаем на 6 минут раньше

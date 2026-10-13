@@ -208,10 +208,16 @@ def render_diff(group_name: str, diff: Diff) -> str:
 # --- напоминание (п. 51) ---
 
 
-def render_reminder(lessons: list[Lesson], minutes: int) -> str:
-    """«Через 15 минут» + пары, которые начинаются (подгруппы — списком)."""
+def render_reminder(lessons: list[Lesson], minutes: int | None) -> str:
+    """«Через 15 минут» + пары, которые начинаются (подгруппы — списком).
+
+    minutes=None — рассылка большая и начата заранее: пишем точное время начала, а не «через N минут».
+    """
     first = lessons[0]
-    head = f"⏰ <b>Через {minutes} мин</b> · {first.start}–{first.end}"
+    if minutes is None:
+        head = f"⏰ <b>Скоро пара</b> · начало в {first.start}"
+    else:
+        head = f"⏰ <b>Через {minutes} мин</b> · {first.start}–{first.end}"
     items = []
     for l in lessons:
         line = f"{kind_mark(l.kind)} <b>{escape(l.subject)}</b>"

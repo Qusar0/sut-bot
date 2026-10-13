@@ -1,6 +1,8 @@
 """Фоновые задачи: рассылки (п. 8), изменения (п. 9), напоминания и сводка (п. 51), обходы sut.ru."""
 
+import asyncio
 import logging
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import or_, select
 
 from bot import metrics
-from bot.broadcast import Broadcaster
+from bot.broadcast import RATE, Broadcaster
 from bot.config import TZ
 from bot.db.base import Session
 from bot.db.models import User
@@ -27,6 +29,11 @@ QUIET_FROM, QUIET_TO = 23, 7  # тихие часы: уведомления бе
 def is_quiet_time(now: datetime | None = None) -> bool:
     h = (now or datetime.now(TZ)).hour
     return h >= QUIET_FROM or h < QUIET_TO
+
+
+def reminder_lead(count: int, rate: int = RATE) -> int:
+    """На сколько минут раньше начинать рассылку, чтобы `count` сообщений успели уйти вовремя."""
+    return max(0, math.ceil(count / (rate * 60)) - 1)
 
 
 @dataclass(frozen=True)
@@ -55,6 +62,7 @@ class Jobs:
         self.bc = broadcaster
         self.staff = staff
         self._staff_empty = False
+        self._tasks: set[asyncio.Task] = set()
         schedule.on_change = self.on_change
 
     async def _send(self, recipients: list[Recipient], text: str, **kwargs) -> None:
@@ -134,30 +142,53 @@ class Jobs:
                 text = "☀️ Доброе утро! Пары сегодня\n\n" + render_day(group.name, week, day)
                 await self._send(users, text, reply_markup=day_nav(day))
 
-    async def remind(self, now: datetime | None = None) -> None:
-        """Напоминания перед парой (п. 51). Запускается раз в минуту."""
+    async def remind(self, now: datetime | None = None, wait: bool = False) -> None:
+        """Напоминания перед парой (п. 51). Запускается раз в минуту.
+
+        Задача только планирует: рассылка идёт фоном, чтобы следующий запуск не ждал её окончания.
+        Если на одну пару напоминаний больше, чем Telegram пропустит за минуту, отправку начинаем
+        заранее (lead), чтобы последний получил напоминание не позже выбранного времени.
+        """
         now = (now or datetime.now(TZ)).replace(second=0, microsecond=0)
         if now.weekday() == 6:
             return
-        groups = await _recipients(User.remind_minutes > 0)
-        for gid, users in groups.items():
+        today_ = now.date()
+        # план: время начала пары -> [(получатель, пары, за сколько минут просил)]
+        plan: dict[str, list[tuple[Recipient, list, int]]] = defaultdict(list)
+        for gid, users in (await _recipients(User.remind_minutes > 0)).items():
             try:
                 # неделя почти всегда уже в памяти — проверка изменений обновляет её каждые 30 минут
-                week = await self.schedule.week(gid, now.date(), max_age=timedelta(hours=1), background=True)
+                week = await self.schedule.week(gid, today_, max_age=timedelta(hours=1), background=True)
             except Exception:
                 continue
-            lessons = week.by_day(now.date())
-            if not lessons:
-                continue
-            by_minutes: dict[int, list[Recipient]] = defaultdict(list)
-            for r in users:
-                by_minutes[r.remind_minutes].append(r)
-            for minutes, rs in by_minutes.items():
-                target = (now + timedelta(minutes=minutes)).strftime("%H:%M")
-                starting = [l for l in lessons if l.start == target]
-                if starting:
-                    metrics.inc("напоминания: отправлено", len(rs))
-                    await self._send(rs, render_reminder(starting, minutes))
+            starts: dict[str, list] = defaultdict(list)
+            for l in week.by_day(today_):
+                starts[l.start].append(l)
+            for start, lessons in starts.items():
+                for r in users:
+                    plan[start].append((r, lessons, r.remind_minutes))
+
+        outgoing: list[tuple[Recipient, str]] = []
+        for start, items in plan.items():
+            h, m = map(int, start.split(":"))
+            begins = now.replace(hour=h, minute=m)
+            lead = reminder_lead(len(items))
+            for r, lessons, minutes in items:
+                if begins - timedelta(minutes=minutes + lead) == now:
+                    outgoing.append((r, render_reminder(lessons, minutes if lead == 0 else None)))
+        if not outgoing:
+            return
+        metrics.inc("напоминания: отправлено", len(outgoing))
+        task = asyncio.create_task(self._send_each(outgoing))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        if wait:
+            await task
+
+    async def _send_each(self, items: list[tuple[Recipient, str]]) -> None:
+        quiet_now = is_quiet_time()
+        for r, text in items:
+            await self.bc.send(r.tg_id, text, disable_notification=quiet_now and r.quiet)
 
     # --- изменения ---
 
