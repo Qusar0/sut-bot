@@ -9,3 +9,7 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+
+# Прокси для sut.ru (секрет VPN, генерируется на сервере)
+singbox/
+proxy.txt

@@ -54,10 +54,12 @@ def _expired(text: str) -> bool:
 
 
 class LkSession:
-    def __init__(self, login: str, password: str, timeout: float = 25.0):
+    def __init__(self, login: str, password: str, timeout: float = 25.0, proxy: str | None = None):
         self.login_name = login
         self._password = password
-        self._http = httpx.AsyncClient(base_url=BASE, headers=HEADERS, timeout=timeout, follow_redirects=True)
+        self._http = httpx.AsyncClient(
+            base_url=BASE, headers=HEADERS, timeout=timeout, follow_redirects=True, proxy=proxy
+        )
         self._lock = asyncio.Lock()  # один запрос за раз на учётку: ЛК хранит состояние в сессии
         self.logged_in = False
 
