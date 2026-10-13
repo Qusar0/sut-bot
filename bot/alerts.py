@@ -26,7 +26,8 @@ class TelegramAlertHandler(logging.Handler):
             return
         key = f"{record.name}:{record.getMessage()[:120]}"
         now = time.monotonic()
-        if now - self._last.get(key, 0) < COOLDOWN:
+        last = self._last.get(key)
+        if last is not None and now - last < COOLDOWN:
             return
         self._last[key] = now
         text = (
