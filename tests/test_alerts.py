@@ -21,8 +21,7 @@ async def test_alert_cooldown():
         log.error("парсер сломался")
         log.error("парсер сломался")  # повтор в окне — не шлём
         log.warning("не ошибка")
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
+        await asyncio.gather(*h._tasks)
     finally:
         log.removeHandler(h)
     assert len(bot.sent) == 1 and "парсер сломался" in bot.sent[0][1]
