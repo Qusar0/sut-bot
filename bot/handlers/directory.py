@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.keyboards.main import KIND_BITS, Btn, choice_list, entity_day_nav, entity_week_nav, subject_kb
 from bot.render.directory import (
@@ -204,11 +204,15 @@ async def teacher_profile(
     text = render_profile(prof, subjects)
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🌐 Страница на sut.ru", url=prof.url)]])
     if prof.photo and len(text) <= PHOTO_CAPTION_LIMIT:
-        try:
-            await cb.message.answer_photo(prof.photo, caption=text, reply_markup=kb)
-            return
-        except TelegramBadRequest:
-            pass  # фото недоступно — отправим текстом
+        # фото сайта Telegram сам скачать не может (их серверы блокируются) — качаем и шлём байтами
+        data = await staff.client.get_bytes(prof.photo)
+        if data:
+            try:
+                photo = BufferedInputFile(data, filename="teacher.jpg")
+                await cb.message.answer_photo(photo, caption=text, reply_markup=kb)
+                return
+            except TelegramBadRequest:
+                pass
     await cb.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
 
 

@@ -47,6 +47,16 @@ class SutPublicClient:
         """Любая страница sut.ru (например, профили преподавателей) с тем же ограничением частоты."""
         return await self._get(background=background, url=url)
 
+    async def get_bytes(self, url: str) -> bytes | None:
+        """Скачивает файл (например, фото преподавателя), чтобы отправить его байтами, а не ссылкой."""
+        await self._fg.wait()
+        try:
+            r = await self._http.get(url)
+            r.raise_for_status()
+            return r.content
+        except httpx.HTTPError:
+            return None
+
     async def _get(self, params: dict | None = None, background: bool = False, url: str = BASE_URL) -> str:
         limiter = self._bg if background else self._fg
         last_exc: Exception | None = None
