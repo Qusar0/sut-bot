@@ -292,3 +292,55 @@ def parse_debts(html: str) -> list[list[str]] | None:
     if "Задолженность отсутствует" in html:
         return None
     return _rows(tree, "table") or [[parse_text_section(html)]]
+
+
+# --- расписание ЛК с кнопкой «Начать занятие» (п. 35–36) ---
+
+
+@dataclass
+class LkLesson:
+    rasp: str  # id занятия в ЛК (для кнопки отметки)
+    time: str  # «1 (9:00-10:35)»
+    subject: str
+    room: str
+    teacher: str
+    started: bool  # занятие уже отмечено
+    button_ready: bool  # кнопка отметки доступна сейчас
+
+
+def parse_lk_schedule(html: str) -> list[LkLesson]:
+    tree = LexborHTMLParser(html)
+    table = tree.css_first("table.simple-little-table")
+    if table is None:
+        return []
+    out = []
+    for tr in table.css("tr"):
+        tds = tr.css("td")
+        if len(tds) < 5:
+            continue
+        knop = tr.css_first("[id^=knop]")
+        rasp = knop.attributes["id"][4:] if knop is not None else ""
+        if not rasp:
+            continue
+        text = _t(tds[1])
+        out.append(
+            LkLesson(
+                rasp=rasp,
+                time=_t(tds[0]),
+                subject=text,
+                room=_t(tds[3]),
+                teacher=_t(tds[4]),
+                started="занятие началось" in text or "Закончено" in _t(knop),
+                button_ready="Отметиться" in _t(knop) or "Начать" in _t(knop),
+            )
+        )
+    return out
+
+
+def parse_mark_result(raw: str) -> str:
+    """Ответ open=1/open=3 — JSON {data: html}. Возвращает текст состояния кнопки."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return _t(LexborHTMLParser(raw).body) if raw else ""
+    return re.sub(r"\s+", " ", LexborHTMLParser(f"<div>{data.get('data', '')}</div>").text()).strip()

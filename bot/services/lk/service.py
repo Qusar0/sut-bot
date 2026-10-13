@@ -186,3 +186,90 @@ class LkService:
                 raise
         self._cache[key] = (time.monotonic(), data)
         return data
+
+    # --- синхронизация (п. 34) и поиск нового для уведомлений (п. 52–56, 58) ---
+
+    async def sync(self, tg_id: int, sections: tuple[str, ...]) -> dict[str, list]:
+        """Опрашивает разделы, обновляет снимки и возвращает {раздел: [новые элементы]}.
+
+        Первый снимок раздела не порождает уведомлений (просто запоминаем состояние).
+        """
+        news: dict[str, list] = {}
+        async with self._lock(tg_id):
+            try:
+                sess = await self._session(tg_id)
+            except NotLinked:
+                return news
+            async with Session() as s:
+                for name in sections:
+                    try:
+                        data = await _fetch(sess, name)
+                    except LkAuthError:
+                        await self._mark(tg_id, "auth_failed", "пароль не подошёл — переподключите кабинет")
+                        await self._drop(tg_id)
+                        return news
+                    except LkError:
+                        continue
+                    jsonable = _jsonable(data)
+                    dg = digest_of(data)
+                    snap = await s.get(LkSnapshot, (tg_id, name))
+                    if snap is None:
+                        s.add(
+                            LkSnapshot(tg_id=tg_id, section=name, data=jsonable, digest=dg, fetched_at=datetime.now(TZ))
+                        )
+                    elif snap.digest != dg:
+                        fresh = _new_items(name, snap.data, jsonable)
+                        if fresh:
+                            news[name] = fresh
+                        snap.data, snap.digest, snap.fetched_at = jsonable, dg, datetime.now(TZ)
+                acc = await s.get(LkAccount, tg_id)
+                if acc is not None:
+                    acc.last_sync_at = datetime.now(TZ)
+                    if acc.status != "ok":
+                        acc.status, acc.last_error = "ok", ""
+                await s.commit()
+            # раздел мог обновиться — сбрасываем короткий кэш
+            for name in sections:
+                self._cache.pop((tg_id, name), None)
+        return news
+
+    # --- отметка на паре (п. 35–36) ---
+    # Делает действие в ЛК от имени студента. Только по явной команде или включённой автоотметке.
+
+    async def lk_schedule(self, tg_id: int):
+        """Расписание из ЛК на сегодня с состоянием кнопки отметки."""
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            html = await sess.post("project/cabinet/forms/raspisanie.php", {"key": "6118"})
+        return P.parse_lk_schedule(html)
+
+    async def refresh_button(self, tg_id: int, rasp: str) -> str:
+        """Обновляет состояние кнопки отметки (open=3)."""
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            raw = await sess.post("project/cabinet/forms/raspisanie.php", {"open": "3", "rasp": rasp})
+        return P.parse_mark_result(raw)
+
+    async def mark_attendance(self, tg_id: int, rasp: str, week: str = "") -> str:
+        """Нажимает «Начать занятие» (open=1) от имени студента. Возвращает текст результата."""
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            raw = await sess.post("project/cabinet/forms/raspisanie.php", {"open": "1", "rasp": rasp, "week": week})
+        from bot import metrics
+
+        metrics.inc("ЛК: отметка")
+        return P.parse_mark_result(raw)
+
+
+def _new_items(section: str, old, new) -> list:
+    """Что появилось в разделе по сравнению с прошлым снимком."""
+    if not isinstance(new, list):
+        return [new] if new != old else []  # текст/объект целиком изменился
+    if section in ("messages", "files"):
+        old_ids = {x.get("id") for x in old} if isinstance(old, list) else set()
+        return [x for x in new if x.get("id") not in old_ids]
+    if section == "diary":
+        old_set = {(x.get("day"), x.get("subject"), x.get("value")) for x in old} if isinstance(old, list) else set()
+        return [x for x in new if (x.get("day"), x.get("subject"), x.get("value")) not in old_set]
+    old_rows = old if isinstance(old, list) else []
+    return [x for x in new if x not in old_rows]
