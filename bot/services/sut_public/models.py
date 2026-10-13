@@ -18,6 +18,26 @@ class Lesson:
     def key(self) -> tuple:
         return (self.day.isoformat(), self.pair, self.subject, self.kind, self.room, self.building, self.teachers)
 
+    def signature(self) -> tuple:
+        """То, что видит студент. Если у отменённой и добавленной пары подписи совпали —
+        для студента ничего не изменилось (напр. поменялось только полное ФИО, а не «Климов А.»)."""
+        import re
+
+        def norm(s: str) -> str:
+            return re.sub(r"\s+", " ", (s or "")).strip().lower()
+
+        return (
+            self.day.isoformat(),
+            norm(self.pair),
+            self.start,
+            self.end,
+            norm(self.subject),
+            norm(self.kind),
+            norm(self.room),
+            norm(self.building),
+            norm(self.teachers_short),
+        )
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["day"] = self.day.isoformat()

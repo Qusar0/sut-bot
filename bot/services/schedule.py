@@ -53,11 +53,35 @@ def _digest(lessons: list[Lesson]) -> str:
     return hashlib.sha256("\n".join(keys).encode()).hexdigest()
 
 
+def _cancel_noop(added: list[Lesson], removed: list[Lesson]) -> tuple[list[Lesson], list[Lesson]]:
+    """Убирает пары, где добавленное и отменённое для студента выглядят одинаково (пустые изменения)."""
+    from collections import Counter
+
+    removed_sig = Counter(l.signature() for l in removed)
+    kept_added, used = [], Counter()
+    for l in added:
+        sig = l.signature()
+        if used[sig] < removed_sig[sig]:
+            used[sig] += 1  # гасит соответствующее отменённое
+        else:
+            kept_added.append(l)
+    kept_removed, used2 = [], Counter()
+    added_sig = Counter(l.signature() for l in added)
+    for l in removed:
+        sig = l.signature()
+        if used2[sig] < added_sig[sig]:
+            used2[sig] += 1
+        else:
+            kept_removed.append(l)
+    return kept_added, kept_removed
+
+
 def diff_lessons(group_id: int, monday: date, old: list[Lesson], new: list[Lesson]) -> Diff | None:
     old_k = {l.key(): l for l in old}
     new_k = {l.key(): l for l in new}
     added = [new_k[k] for k in new_k.keys() - old_k.keys()]
     removed = [old_k[k] for k in old_k.keys() - new_k.keys()]
+    added, removed = _cancel_noop(added, removed)
     if not added and not removed:
         return None
     return Diff(

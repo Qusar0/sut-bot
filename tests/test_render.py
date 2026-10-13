@@ -57,3 +57,22 @@ def test_diff():
     text = render_diff("ИСТ-2633", d)
     assert "➕" in text and "➖" in text and "999" in text
     assert diff_lessons(56882, WEEK.monday, old, list(old)) is None
+
+
+def test_diff_ignores_invisible_changes():
+    """Пара отменена и добавлена с тем же видимым содержимым — это не изменение."""
+    from dataclasses import replace
+
+    old = WEEK.lessons
+    # меняем только полное ФИО, «Кокорин М.С.» и всё остальное — то же
+    same_view = replace(old[0], teachers=("Кокорин Михаил Станиславович (и.о.)",))
+    assert diff_lessons(56882, WEEK.monday, old, [same_view] + old[1:]) is None
+
+
+def test_diff_real_change_still_reported():
+    from dataclasses import replace
+
+    old = WEEK.lessons
+    moved = replace(old[0], room="999", teachers_short="Иванов И.И.", teachers=("Иванов Иван Иванович",))
+    d = diff_lessons(56882, WEEK.monday, old, [moved] + old[1:])
+    assert d and d.added == [moved] and d.removed == [old[0]]
