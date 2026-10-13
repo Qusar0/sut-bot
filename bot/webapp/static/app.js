@@ -132,7 +132,7 @@ async function showHome() {
     $("h-search").onclick = () => switchTab("search");
     const tiles = [
       ["📚", "Предметы", () => switchTab("subjects")],
-      ["🚪", "Аудитории", () => switchTab("search")],
+      ["🚪", "Аудитории", () => showRooms()],
       ["👩‍🏫", "Преподаватели", () => switchTab("search")],
       ["📅", "Неделя", () => { state.view = "week"; switchTab("day"); showWeek(); }],
     ];
@@ -224,6 +224,33 @@ async function showSearch() {
       } catch (e) { handle(e); }
     }, 300);
   };
+}
+
+async function showRooms() {
+  chrome({ header: true }); spin();
+  $("h-title").textContent = "Аудитории"; $("h-sub").textContent = "вашей группы";
+  try {
+    const d = await api("/api/my-rooms");
+    view.innerHTML = '<input id="rq" placeholder="Поиск аудитории, напр. 303 или 501/2" autocomplete="off"><div id="rres"></div>';
+    const rq = $("rq"), rres = $("rres");
+    const render = (rooms, title) => {
+      rres.innerHTML = (title ? `<div class="block">${title}</div>` : "") + rooms.map((r) =>
+        `<div class="row" data-id="${r.id}"><span>🚪 ${esc(r.name)}</span>${r.count ? `<span class="rowprog">${r.count} зан.</span>` : '<span class="hint">→</span>'}</div>`).join("") ||
+        '<div class="note">Ничего не найдено</div>';
+      rres.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity("room", el.dataset.id));
+    };
+    render(d.rooms, "Аудитории моей группы");
+    let timer;
+    rq.oninput = () => {
+      clearTimeout(timer);
+      const v = rq.value.trim();
+      if (v.length < 1) { render(d.rooms, "Аудитории моей группы"); return; }
+      timer = setTimeout(async () => {
+        try { const sr = await api("/api/search?q=" + encodeURIComponent(v)); render(sr.rooms, ""); }
+        catch (e) { handle(e); }
+      }, 300);
+    };
+  } catch (e) { handle(e); }
 }
 
 async function showEntity(kind, id, date) {

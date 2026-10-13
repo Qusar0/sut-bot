@@ -287,6 +287,21 @@ def build_webapp(
                 out.append({"id": t.id, "name": t.full_name, "subjects": ", ".join(sorted(subjects[full]))})
         return web.json_response({"teachers": out})
 
+    async def my_rooms(request: web.Request) -> web.Response:
+        """Аудитории группы за семестр, по частоте занятий."""
+        from collections import Counter
+
+        await _guard_consent(request)
+        _, group = await _need_group(request)
+        weeks = await schedule.semester(group.id)
+        usage = Counter((l.room, l.building) for w in weeks for l in w.lessons if l.room)
+        out = []
+        for (room, building), n in usage.most_common(40):
+            r_obj = directory.room_by_key(room, building)
+            if r_obj is not None:
+                out.append({"id": r_obj.id, "name": room_label(room, building), "count": n})
+        return web.json_response({"rooms": out})
+
     async def entity(request: web.Request) -> web.Response:
         await _guard_consent(request)
         kind, eid = request.match_info["kind"], int(request.match_info["id"])
@@ -473,6 +488,7 @@ def build_webapp(
     r.add_get("/api/subject", subject)
     r.add_get("/api/search", search)
     r.add_get("/api/my-teachers", my_teachers)
+    r.add_get("/api/my-rooms", my_rooms)
     r.add_get("/api/entity/{kind}/{id}", entity)
     r.add_get("/api/teacher/{id}/profile", teacher_profile)
     if STATIC.exists():
