@@ -43,14 +43,18 @@ class SutPublicClient:
         self._bg = RateLimiter(interval)
         self._fg = RateLimiter(interactive_interval)
 
-    async def _get(self, params: dict | None = None, background: bool = False) -> str:
+    async def get_url(self, url: str, background: bool = True) -> str:
+        """Любая страница sut.ru (например, профили преподавателей) с тем же ограничением частоты."""
+        return await self._get(background=background, url=url)
+
+    async def _get(self, params: dict | None = None, background: bool = False, url: str = BASE_URL) -> str:
         limiter = self._bg if background else self._fg
         last_exc: Exception | None = None
         for attempt in range(3):
             await limiter.wait()
             t0 = time.perf_counter()
             try:
-                r = await self._http.get(BASE_URL, params=params)
+                r = await self._http.get(url, params=params)
                 r.raise_for_status()
                 metrics.observe("sut.ru: запрос", time.perf_counter() - t0)
                 return r.text

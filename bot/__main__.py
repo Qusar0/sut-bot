@@ -17,6 +17,7 @@ from bot.scheduler.jobs import Jobs
 from bot.services.calendar import CalendarFeeds
 from bot.services.directory import Directory
 from bot.services.schedule import ScheduleService
+from bot.services.staff import StaffService
 from bot.services.sut_public.client import SutPublicClient
 from bot.web import start_web
 
@@ -35,13 +36,15 @@ async def main() -> None:
     client = SutPublicClient(interval=settings.crawl_delay, interactive_interval=settings.interactive_delay)
     directory_svc = Directory()
     schedule_svc = ScheduleService(client, directory_svc)
-    jobs = Jobs(schedule_svc, Broadcaster(bot))
+    staff_svc = StaffService(client)
+    jobs = Jobs(schedule_svc, Broadcaster(bot), staff_svc)
     await jobs.startup()
     scheduler = jobs.install()
 
     dp = Dispatcher()
     dp["schedule"] = schedule_svc
     dp["directory"] = directory_svc
+    dp["staff"] = staff_svc
     feeds = CalendarFeeds(schedule_svc)
     dp["calendar_feeds"] = feeds
     dp.message.outer_middleware(TimingMiddleware())

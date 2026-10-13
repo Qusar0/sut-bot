@@ -32,9 +32,10 @@ async def _users_by_group(*conditions) -> dict[int, list[int]]:
 
 
 class Jobs:
-    def __init__(self, schedule: ScheduleService, broadcaster: Broadcaster):
+    def __init__(self, schedule: ScheduleService, broadcaster: Broadcaster, staff=None):
         self.schedule = schedule
         self.bc = broadcaster
+        self.staff = staff
         schedule.on_change = self.on_change
 
     async def refresh_groups(self) -> None:
@@ -96,6 +97,10 @@ class Jobs:
                     failed += 1
         log.info("обход групп завершён: %d недель, ошибок %d", ok, failed)
 
+    async def refresh_staff(self) -> None:
+        if self.staff is not None:
+            await self.staff.refresh_lists()
+
     async def on_change(self, diff: Diff) -> None:
         group = await get_group(diff.group_id)
         users = (await _users_by_group(User.notify_changes.is_(True), User.group_id == diff.group_id)).get(
@@ -107,6 +112,7 @@ class Jobs:
     async def startup(self) -> None:
         if await groups_count() == 0:
             await self.refresh_groups()
+        self._staff_empty = self.staff is not None and await self.staff.count() == 0
         if self.schedule.directory is not None:
             await self.schedule.directory.load()
             if n := await self.schedule.directory.rebuild_if_empty():
@@ -134,6 +140,13 @@ class Jobs:
             timed("обход всех групп", self.crawl_all),
             CronTrigger(hour="6-21/3", minute=15, timezone=TZ),
             next_run_time=datetime.now(TZ) + timedelta(seconds=30),  # и сразу после запуска
+            **opts,
+        )
+        staff_empty = self.staff is not None and self._staff_empty
+        sch.add_job(
+            timed("профили преподавателей", self.refresh_staff),
+            CronTrigger(day_of_week="mon", hour=5, minute=0, timezone=TZ),
+            next_run_time=datetime.now(TZ) + timedelta(minutes=2) if staff_empty else None,
             **opts,
         )
         sch.add_job(

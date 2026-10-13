@@ -148,6 +148,10 @@ def month_calendar(start: date, end: date, lesson_days: set[date]) -> InlineKeyb
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _profile_row(prefix: str, eid: int) -> list[list[InlineKeyboardButton]]:
+    return [[InlineKeyboardButton(text="👤 Профиль", callback_data=f"tp:{eid}")]] if prefix == "t" else []
+
+
 def entity_day_nav(prefix: str, eid: int, day: date) -> InlineKeyboardMarkup:
     """Листание расписания преподавателя (prefix="t") или аудитории (prefix="r") по дням."""
     prev, nxt = day - timedelta(days=1), day + timedelta(days=1)
@@ -163,6 +167,7 @@ def entity_day_nav(prefix: str, eid: int, day: date) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=f"{nxt:%d.%m} ➡️", callback_data=f"{prefix}:{eid}:d:{nxt.isoformat()}"),
             ],
             [InlineKeyboardButton(text="🗓 Вся неделя", callback_data=f"{prefix}:{eid}:w:{monday.isoformat()}")],
+            *_profile_row(prefix, eid),
         ]
     )
 
@@ -174,7 +179,8 @@ def entity_week_nav(prefix: str, eid: int, monday: date) -> InlineKeyboardMarkup
             [
                 InlineKeyboardButton(text="⬅️ Неделя назад", callback_data=f"{prefix}:{eid}:w:{prev.isoformat()}"),
                 InlineKeyboardButton(text="Неделя вперёд ➡️", callback_data=f"{prefix}:{eid}:w:{nxt.isoformat()}"),
-            ]
+            ],
+            *_profile_row(prefix, eid),
         ]
     )
 

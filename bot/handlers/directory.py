@@ -15,6 +15,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot.keyboards.main import KIND_BITS, Btn, choice_list, entity_day_nav, entity_week_nav, subject_kb
 from bot.render.directory import (
     KINDS,
+    PHOTO_CAPTION_LIMIT,
+    base_subject,
+    render_profile,
     render_slots_day,
     render_slots_week,
     render_subject,
@@ -26,6 +29,7 @@ from bot.render.directory import (
 )
 from bot.services.directory import Directory, room_label
 from bot.services.schedule import ScheduleService, monday_of, today
+from bot.services.staff import StaffService
 from bot.services.users import get_group, get_user
 
 router = Router(name="directory")
@@ -171,6 +175,38 @@ async def my_teachers(cb: CallbackQuery, schedule: ScheduleService, directory: D
         f"📋 <b>Преподаватели группы {escape(group.name)}</b>\n<i>текущий семестр</i>",
         reply_markup=choice_list(items),
     )
+
+
+@router.callback_query(F.data.startswith("tp:"))
+async def teacher_profile(
+    cb: CallbackQuery, directory: Directory, staff: StaffService, schedule: ScheduleService
+) -> None:
+    t = directory.teacher(int(cb.data[3:]))
+    if t is None:
+        await cb.answer("Преподаватель не найден", show_alert=True)
+        return
+    await cb.answer()
+    prof = await staff.profile(t.full_name)
+    if prof is None:
+        text = f"<b>👤 {escape(t.full_name)}</b>\n\nПрофиля на сайте sut.ru не нашлось."
+        if not await staff.count():
+            text += "\n<i>Список преподавателей ещё собирается, попробуйте позже.</i>"
+        await cb.message.answer(text)
+        return
+    subjects: list[str] = []
+    group = await _user_group(cb.from_user.id)
+    if group is not None:
+        week = await schedule.week(group.id, today())
+        subjects = sorted({base_subject(l.subject) for l in week.lessons if t.full_name in l.teachers})
+    text = render_profile(prof, subjects)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🌐 Страница на sut.ru", url=prof.url)]])
+    if prof.photo and len(text) <= PHOTO_CAPTION_LIMIT:
+        try:
+            await cb.message.answer_photo(prof.photo, caption=text, reply_markup=kb)
+            return
+        except TelegramBadRequest:
+            pass  # фото недоступно — отправим текстом
+    await cb.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
 
 
 # ---------------- аудитории ----------------

@@ -171,3 +171,26 @@ def render_subject(
         keep = MAX_LEN - len(head) - len("\n".join(summary)) - 60
         text = head + "\n\n…" + body[-keep:] + "\n\n" + "\n".join(summary)
     return text
+
+
+# --- профиль преподавателя (п. 14) ---
+
+PHOTO_CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram
+
+
+def render_profile(p, subjects: list[str] | None = None) -> str:
+    lines = [f"<b>👤 {escape(p.full_name)}</b>"]
+    if p.position:
+        lines.append(f"<i>{escape(p.position)}</i>")
+    icons = {"Адрес": "📍", "E-mail": "✉️", "Телефон": "📞"}
+    contacts = [f"{icons.get(k, '•')} {escape(v)}" for k, v in p.contacts.items()]
+    if contacts:
+        lines += ["", *contacts]
+    if subjects:
+        lines += ["", "<b>Ведёт у вашей группы:</b> " + escape(", ".join(subjects))]
+    if p.interests:
+        lines += ["", "<b>Научные интересы:</b> " + escape(", ".join(p.interests))]
+    if p.education:
+        edu = p.education if len(p.education) <= 300 else p.education[:297] + "…"
+        lines += ["", "<b>Образование:</b> " + escape(edu)]
+    return "\n".join(lines)

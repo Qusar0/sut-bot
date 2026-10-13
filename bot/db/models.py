@@ -128,3 +128,17 @@ class CalendarToken(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id", ondelete="CASCADE"), primary_key=True)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StaffProfile(Base):
+    """Преподаватель с сайта sut.ru (п. 14). Ключ — нормализованное ФИО, по нему связываемся с расписанием."""
+
+    __tablename__ = "staff_profiles"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(128))
+    position: Mapped[str] = mapped_column(String(256), default="")
+    url: Mapped[str] = mapped_column(String(512))
+    data: Mapped[dict | None] = mapped_column(JSON)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    listed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
