@@ -16,4 +16,7 @@ ignore = ["E741"]  # однобуквенное l для занятия (lesson)
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# один event loop на все тесты: пул соединений с БД общий
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]

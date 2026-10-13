@@ -33,6 +33,10 @@ cp .env.example .env          # впишите BOT_TOKEN от @BotFather
 python -m bot
 ```
 
+База: локально SQLite, в проде PostgreSQL (`DATABASE_URL=postgresql+asyncpg://...`).
+Схема меняется только миграциями Alembic: бот применяет их сам при старте.
+Новая миграция после правки моделей: `alembic revision --autogenerate -m "что изменилось"`.
+
 Для разработки: `pip install -r requirements-dev.txt`, затем `pytest` и `ruff check .`.
 При каждом push и pull request GitHub Actions запускает линтер и тесты (`.github/workflows/ci.yml`).
 

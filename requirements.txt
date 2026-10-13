@@ -9,3 +9,6 @@ tzdata
 icalendar>=6
 aiohttp>=3.9
 Pillow>=10.4
+alembic>=1.13
+asyncpg>=0.29
+redis>=5
