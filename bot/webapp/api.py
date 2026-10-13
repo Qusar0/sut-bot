@@ -427,6 +427,27 @@ def build_webapp(
             html = SECTION_RENDER[name](data).replace("\n", "<br>")
             return web.json_response({"name": name, "html": html})
 
+        async def lk_diary(request: web.Request) -> web.Response:
+            """Дневник, сгруппированный по предметам: для каждого — оценки и пропуски по датам."""
+            from bot.services.lk.service import NotLinked
+
+            try:
+                marks = await lk.section(request["tg_id"], "diary")
+            except NotLinked:
+                raise web.HTTPConflict(text="not linked") from None
+            except Exception:
+                raise web.HTTPServiceUnavailable() from None
+            by_subject: dict[str, list] = {}
+            for m in marks:
+                by_subject.setdefault(m.subject, []).append({"date": m.day.isoformat(), "value": m.value})
+            out = []
+            for name, entries in sorted(by_subject.items()):
+                entries.sort(key=lambda e: e["date"], reverse=True)
+                grades = [e["value"] for e in entries if any(ch.isdigit() for ch in e["value"])]
+                absences = sum("н" in e["value"].lower() for e in entries)
+                out.append({"name": name, "entries": entries, "grades": grades, "absences": absences})
+            return web.json_response({"subjects": out})
+
         async def lk_attendance(request: web.Request) -> web.Response:
             from bot.services.lk.service import NotLinked
 
@@ -472,6 +493,7 @@ def build_webapp(
         r.add_post("/api/lk/link", lk_link)
         r.add_post("/api/lk/unlink", lk_unlink)
         r.add_get("/api/lk/section", lk_section)
+        r.add_get("/api/lk/diary", lk_diary)
         r.add_get("/api/lk/attendance", lk_attendance)
         r.add_post("/api/lk/mark", lk_mark)
         r.add_post("/api/lk/auto", lk_auto)

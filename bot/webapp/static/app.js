@@ -191,29 +191,44 @@ async function showSubject(name) {
   } catch (e) { handle(e); }
 }
 
+// переключатель «Мои / Все»
+function segment(mine, onMine, onAll) {
+  return `<div class="seg"><button class="${mine ? "primary" : ""}" data-s="mine">${onMine}</button>` +
+    `<button class="${mine ? "" : "primary"}" data-s="all">${onAll}</button></div>`;
+}
+
 async function showSearch() {
-  chrome({ header: true }); $("h-title").textContent = "Поиск"; $("h-sub").textContent = "преподаватель или аудитория";
-  view.innerHTML = '<input id="q" placeholder="Фамилия или номер аудитории" autocomplete="off"><div id="res"></div>';
+  chrome({ header: true }); $("h-title").textContent = "Преподаватели"; $("h-sub").textContent = "";
+  let mine = true;
+  view.innerHTML = segment(true, "Мои", "Все") +
+    '<input id="q" placeholder="Поиск по фамилии" autocomplete="off" style="display:none"><div id="res"></div>';
   const q = $("q"), res = $("res");
   const bind = () => res.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity(el.dataset.k, el.dataset.id));
 
   async function showMine() {
     try {
       const d = await api("/api/my-teachers");
-      if (!d.teachers.length) { res.innerHTML = ""; return; }
-      res.innerHTML = '<div class="block">Мои преподаватели</div>' + d.teachers.map((t) =>
+      res.innerHTML = d.teachers.length ? d.teachers.map((t) =>
         `<div class="row" data-k="teacher" data-id="${t.id}"><div><div>${esc(t.name)}</div>` +
-        `<div class="rowprog" style="white-space:normal">${esc(t.subjects)}</div></div><span class="hint">→</span></div>`).join("");
+        `<div class="rowprog" style="white-space:normal">${esc(t.subjects)}</div></div><span class="hint">→</span></div>`).join("")
+        : '<div class="note">Не удалось собрать список.</div>';
       bind();
     } catch (e) { res.innerHTML = ""; }
   }
+
+  function applyMode() {
+    view.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("primary", b.dataset.s === (mine ? "mine" : "all")));
+    q.style.display = mine ? "none" : "";
+    if (mine) { showMine(); } else { res.innerHTML = '<div class="note">Введите фамилию или номер аудитории.</div>'; q.focus(); }
+  }
+  view.querySelectorAll(".seg button").forEach((b) => b.onclick = () => { mine = b.dataset.s === "mine"; applyMode(); });
   showMine();
 
   let timer;
   q.oninput = () => {
     clearTimeout(timer);
     const val = q.value.trim();
-    if (val.length < 2) { showMine(); return; }
+    if (val.length < 2) { res.innerHTML = ""; return; }
     timer = setTimeout(async () => {
       try {
         const d = await api("/api/search?q=" + encodeURIComponent(val));
@@ -228,29 +243,37 @@ async function showSearch() {
 
 async function showRooms() {
   chrome({ header: true }); spin();
-  $("h-title").textContent = "Аудитории"; $("h-sub").textContent = "вашей группы";
-  try {
-    const d = await api("/api/my-rooms");
-    view.innerHTML = '<input id="rq" placeholder="Поиск аудитории, напр. 303 или 501/2" autocomplete="off"><div id="rres"></div>';
-    const rq = $("rq"), rres = $("rres");
-    const render = (rooms, title) => {
-      rres.innerHTML = (title ? `<div class="block">${title}</div>` : "") + rooms.map((r) =>
-        `<div class="row" data-id="${r.id}"><span>🚪 ${esc(r.name)}</span>${r.count ? `<span class="rowprog">${r.count} зан.</span>` : '<span class="hint">→</span>'}</div>`).join("") ||
-        '<div class="note">Ничего не найдено</div>';
-      rres.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity("room", el.dataset.id));
-    };
-    render(d.rooms, "Аудитории моей группы");
-    let timer;
-    rq.oninput = () => {
-      clearTimeout(timer);
-      const v = rq.value.trim();
-      if (v.length < 1) { render(d.rooms, "Аудитории моей группы"); return; }
-      timer = setTimeout(async () => {
-        try { const sr = await api("/api/search?q=" + encodeURIComponent(v)); render(sr.rooms, ""); }
-        catch (e) { handle(e); }
-      }, 300);
-    };
-  } catch (e) { handle(e); }
+  $("h-title").textContent = "Аудитории"; $("h-sub").textContent = "";
+  let data;
+  try { data = await api("/api/my-rooms"); } catch (e) { return handle(e); }
+  let mine = true;
+  view.innerHTML = segment(true, "Мои", "Все") +
+    '<input id="rq" placeholder="Поиск: 303, 501/2…" autocomplete="off" style="display:none"><div id="rres"></div>';
+  const rq = $("rq"), rres = $("rres");
+  const render = (rooms) => {
+    rres.innerHTML = rooms.length ? rooms.map((r) =>
+      `<div class="row" data-id="${r.id}"><span>🚪 ${esc(r.name)}</span>${r.count ? `<span class="rowprog">${r.count} зан.</span>` : '<span class="hint">→</span>'}</div>`).join("")
+      : '<div class="note">Ничего не найдено</div>';
+    rres.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity("room", el.dataset.id));
+  };
+  function applyMode() {
+    view.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("primary", b.dataset.s === (mine ? "mine" : "all")));
+    rq.style.display = mine ? "none" : "";
+    if (mine) { render(data.rooms); } else { rres.innerHTML = '<div class="note">Введите номер аудитории.</div>'; rq.focus(); }
+  }
+  view.querySelectorAll(".seg button").forEach((b) => b.onclick = () => { mine = b.dataset.s === "mine"; applyMode(); });
+  render(data.rooms);
+
+  let timer;
+  rq.oninput = () => {
+    clearTimeout(timer);
+    const v = rq.value.trim();
+    if (v.length < 1) { rres.innerHTML = ""; return; }
+    timer = setTimeout(async () => {
+      try { const sr = await api("/api/search?q=" + encodeURIComponent(v)); render(sr.rooms); }
+      catch (e) { handle(e); }
+    }, 300);
+  };
 }
 
 async function showEntity(kind, id, date) {
@@ -340,7 +363,7 @@ async function showLK() {
        <div class="sw ${st.auto_attendance ? "on" : ""}" id="lk-auto"><i></i></div></div>` +
     sections +
     `<div class="row" id="lk-unlink"><span>🔌 Отключить кабинет</span></div>`;
-  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => lkSection(r.dataset.sec, r.textContent));
+  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : lkSection(r.dataset.sec, r.textContent)));
   $("lk-att").onclick = lkAttendance;
   $("lk-unlink").onclick = async () => {
     if (tg && !(await new Promise((res) => tg.showConfirm("Отключить кабинет и удалить его данные?", res)))) return;
@@ -370,6 +393,37 @@ function lkLinkForm() {
       if (d.ok) { showLK(); } else { $("lk-err").textContent = d.error; $("lk-go").textContent = "Подключить"; }
     } catch (e) { $("lk-err").textContent = "Не удалось подключить."; $("lk-go").textContent = "Подключить"; }
   };
+}
+
+function markChip(v) {
+  const t = v.toLowerCase();
+  const cls = /\d/.test(v) ? "g" : t.includes("н") ? "a" : "e";
+  return `<span class="mk-chip ${cls}">${esc(v)}</span>`;
+}
+
+async function lkDiary() {
+  chrome({ header: true }); spin(); backButton(showLK); $("h-title").textContent = "📔 Дневник";
+  try {
+    const d = await api("/api/lk/diary");
+    if (!d.subjects.length) { view.innerHTML = '<div class="empty">Оценок и отметок пока нет.</div>'; return; }
+    view.innerHTML = d.subjects.map((s, i) => {
+      const g = s.grades.length ? `<span class="rowprog">оценки: ${s.grades.join(" ")}</span>` : "";
+      const a = s.absences ? `<span class="rowprog" style="color:var(--lab)">Н ×${s.absences}</span>` : "";
+      return `<div class="row" data-i="${i}"><div style="flex:1"><div>${esc(s.name)}</div>
+        <div style="margin-top:4px">${g} ${a}</div></div><span class="hint">→</span></div>`;
+    }).join("");
+    view.querySelectorAll(".row").forEach((r) => r.onclick = () => lkSubjectDiary(d.subjects[+r.dataset.i]));
+  } catch (e) { view.innerHTML = e.code === "no_group" ? "" : '<div class="empty">Дневник недоступен.</div>'; }
+}
+
+function lkSubjectDiary(s) {
+  chrome({ header: true }); backButton(lkDiary); $("h-title").textContent = s.name; $("h-sub").textContent = "дневник";
+  const summary = `<div class="note">Оценок: ${s.grades.length} · пропусков (Н): ${s.absences}</div>`;
+  const rows = s.entries.map((e) => {
+    const [y, m, dd] = e.date.split("-");
+    return `<div class="row" style="cursor:default"><span>${dd}.${m}</span>${markChip(e.value)}</div>`;
+  }).join("");
+  view.innerHTML = summary + rows;
 }
 
 async function lkSection(name, title) {
