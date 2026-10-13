@@ -26,5 +26,11 @@ class Settings(BaseSettings):
     web_host: str = "0.0.0.0"
     web_port: int = 8080
 
+    # Состояния диалогов (выбор группы, поиск) в Redis переживают перезапуск. Без REDIS_URL — в памяти.
+    redis_url: str | None = None
+    # Вебхук вместо polling (нужен PUBLIC_URL с HTTPS). Секрет проверяется в заголовке каждого запроса.
+    use_webhook: bool = False
+    webhook_secret: SecretStr | None = None
+
 
 settings = Settings()

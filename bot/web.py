@@ -38,8 +38,18 @@ def build_app(feeds: CalendarFeeds) -> web.Application:
     return app
 
 
-async def start_web(feeds: CalendarFeeds, host: str, port: int) -> web.AppRunner:
-    runner = web.AppRunner(build_app(feeds), access_log=None)  # токены в логи не пишем
+WEBHOOK_PATH = "/tg/webhook"
+
+
+async def start_web(feeds: CalendarFeeds, host: str, port: int, dp=None, bot=None, secret: str | None = None):
+    """Поднимает HTTP-сервер. Если переданы dp и bot — он же принимает вебхук Telegram."""
+    app = build_app(feeds)
+    if dp is not None and bot is not None:
+        from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+
+        SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=secret).register(app, path=WEBHOOK_PATH)
+        setup_application(app, dp, bot=bot)
+    runner = web.AppRunner(app, access_log=None)  # токены и ссылки календаря в логи не пишем
     await runner.setup()
     await web.TCPSite(runner, host, port).start()
     log.info("веб-сервер слушает %s:%s", host, port)

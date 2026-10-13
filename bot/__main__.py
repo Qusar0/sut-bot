@@ -19,7 +19,7 @@ from bot.services.directory import Directory
 from bot.services.schedule import ScheduleService
 from bot.services.staff import StaffService
 from bot.services.sut_public.client import SutPublicClient
-from bot.web import start_web
+from bot.web import WEBHOOK_PATH, start_web
 
 COMMANDS = [
     BotCommand(command="start", description="Главное меню"),
@@ -27,6 +27,16 @@ COMMANDS = [
     BotCommand(command="docs", description="Документы сервиса"),
     BotCommand(command="delete", description="Удалить все мои данные"),
 ]  # /stats — только для ADMIN_ID, в меню не показываем
+
+
+def _storage():
+    if settings.redis_url:
+        from aiogram.fsm.storage.redis import RedisStorage
+
+        return RedisStorage.from_url(settings.redis_url)
+    from aiogram.fsm.storage.memory import MemoryStorage
+
+    return MemoryStorage()
 
 
 async def main() -> None:
@@ -41,7 +51,7 @@ async def main() -> None:
     await jobs.startup()
     scheduler = jobs.install()
 
-    dp = Dispatcher()
+    dp = Dispatcher(storage=_storage())
     dp["schedule"] = schedule_svc
     dp["directory"] = directory_svc
     dp["staff"] = staff_svc
@@ -63,9 +73,20 @@ async def main() -> None:
     )
 
     await bot.set_my_commands(COMMANDS)
-    web_runner = await start_web(feeds, settings.web_host, settings.web_port)
+    webhook = settings.use_webhook and settings.public_url
+    secret = settings.webhook_secret.get_secret_value() if settings.webhook_secret else None
+    web_runner = await start_web(
+        feeds, settings.web_host, settings.web_port, dp=dp if webhook else None, bot=bot, secret=secret
+    )
     try:
-        await dp.start_polling(bot)
+        if webhook:
+            url = settings.public_url.rstrip("/") + WEBHOOK_PATH
+            await bot.set_webhook(url, secret_token=secret, drop_pending_updates=False)
+            logging.getLogger(__name__).info("режим вебхука: %s", url)
+            await asyncio.Event().wait()  # работаем, пока процесс не остановят
+        else:
+            await bot.delete_webhook(drop_pending_updates=False)
+            await dp.start_polling(bot)
     finally:
         await web_runner.cleanup()
         scheduler.shutdown(wait=False)
