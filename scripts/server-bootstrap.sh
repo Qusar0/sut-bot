@@ -3,6 +3,8 @@
 #
 #   CI_PUBKEY='ssh-ed25519 AAAA... sut-bot-ci-deploy' bash scripts/server-bootstrap.sh
 #
+# Необязательно ADMIN_PUBKEY='ssh-ed25519 ...' — личный ключ для входа ssh deploy@<IP>.
+#
 # Делает: swap 2 ГБ, Docker, firewall, пользователь deploy (вход только по ключу),
 # клон репозитория в /opt/sut-bot, заготовка .env, отключение входа по паролю.
 # Скрипт идемпотентный — можно запускать повторно.
@@ -52,6 +54,10 @@ install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
 AUTH="/home/$DEPLOY_USER/.ssh/authorized_keys"
 touch "$AUTH"
 grep -qF "$CI_PUBKEY" "$AUTH" || echo "$CI_PUBKEY" >> "$AUTH"
+# личный ключ администратора для интерактивного входа (необязательно)
+if [[ -n "${ADMIN_PUBKEY:-}" ]]; then
+  grep -qF "$ADMIN_PUBKEY" "$AUTH" || echo "$ADMIN_PUBKEY" >> "$AUTH"
+fi
 chmod 600 "$AUTH"
 chown "$DEPLOY_USER:$DEPLOY_USER" "$AUTH"
 
