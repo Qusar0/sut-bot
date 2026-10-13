@@ -49,8 +49,8 @@ async def _render_section(name: str, data) -> str:
 # --- вход в раздел ---
 
 
-async def _show_cabinet(message: Message, lk: LkService) -> None:
-    acc = await lk.account(message.from_user.id)
+async def _show_cabinet(message: Message, lk: LkService, tg_id: int) -> None:
+    acc = await lk.account(tg_id)
     if acc is None:
         await message.answer(
             "<b>🏛 Личный кабинет</b>\n\n"
@@ -66,20 +66,20 @@ async def _show_cabinet(message: Message, lk: LkService) -> None:
     sync = f"\n<i>обновлено: {acc.last_sync_at:%d.%m %H:%M}</i>" if acc.last_sync_at else ""
     await message.answer(
         f"<b>🏛 Личный кабинет</b>\n{escape(acc.fio)} · {escape(acc.group_name)}{sync}{status}",
-        reply_markup=lk_cabinet(),
+        reply_markup=lk_cabinet(acc.auto_attendance),
     )
 
 
 @router.message(Command("lk"))
 @router.message(F.text == Btn.LK)
 async def lk_menu(message: Message, lk: LkService) -> None:
-    await _show_cabinet(message, lk)
+    await _show_cabinet(message, lk, message.from_user.id)
 
 
 @router.callback_query(F.data == "lk:menu")
 async def lk_menu_cb(cb: CallbackQuery, lk: LkService) -> None:
     await cb.answer()
-    await _show_cabinet(cb.message, lk)
+    await _show_cabinet(cb.message, lk, cb.from_user.id)
 
 
 # --- привязка ---
@@ -129,7 +129,7 @@ async def link_password(message: Message, state: FSMContext, lk: LkService) -> N
         await wait.edit_text(UNAVAILABLE)
         return
     await wait.edit_text(f"✅ Кабинет подключён: <b>{escape(profile.fio)}</b>")
-    await _show_cabinet(message, lk)
+    await _show_cabinet(message, lk, message.from_user.id)
 
 
 # --- разделы ---
@@ -233,7 +233,7 @@ async def auto_toggle(cb: CallbackQuery, lk: LkService) -> None:
     if acc.auto_attendance:
         await lk.set_auto(cb.from_user.id, False)
         await cb.answer("Автоотметка выключена")
-        await _show_cabinet(cb.message, lk)
+        await _show_cabinet(cb.message, lk, cb.from_user.id)
         return
     await cb.answer()
     await cb.message.answer(
@@ -253,7 +253,7 @@ async def auto_on(cb: CallbackQuery, lk: LkService) -> None:
         await cb.message.edit_text("✅ Автоотметка включена. Отмечу вас на ближайших парах.")
     except TelegramBadRequest:
         pass
-    await _show_cabinet(cb.message, lk)
+    await _show_cabinet(cb.message, lk, cb.from_user.id)
 
 
 # --- отключение ---
