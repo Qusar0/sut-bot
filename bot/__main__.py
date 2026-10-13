@@ -81,10 +81,27 @@ async def main() -> None:
     )
 
     await bot.set_my_commands(COMMANDS)
+    if settings.public_url:  # кнопка-меню Telegram открывает Mini App (нужен HTTPS)
+        from aiogram.types import MenuButtonWebApp, WebAppInfo
+
+        try:
+            await bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="Приложение", web_app=WebAppInfo(url=settings.public_url.rstrip("/") + "/app")
+                )
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("не удалось установить кнопку Mini App")
     webhook = settings.use_webhook and settings.public_url
     secret = settings.webhook_secret.get_secret_value() if settings.webhook_secret else None
     web_runner = await start_web(
-        feeds, settings.web_host, settings.web_port, dp=dp if webhook else None, bot=bot, secret=secret
+        feeds,
+        settings.web_host,
+        settings.web_port,
+        dp=dp if webhook else None,
+        bot=bot,
+        secret=secret,
+        webapp={"schedule": schedule_svc, "directory": directory_svc, "staff": staff_svc, "lk": lk_svc},
     )
     try:
         if webhook:

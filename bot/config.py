@@ -32,5 +32,8 @@ class Settings(BaseSettings):
     use_webhook: bool = False
     webhook_secret: SecretStr | None = None
 
+    # Mini App: при локальной разработке (с 127.0.0.1) запросы без подписи Telegram считаются от этого tg_id.
+    webapp_dev_user: int | None = None
+
 
 settings = Settings()
