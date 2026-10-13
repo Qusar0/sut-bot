@@ -1,14 +1,18 @@
-# Запуск: заполнить .env (BOT_TOKEN, ENCRYPTION_KEY, POSTGRES_PASSWORD, …) и `docker compose up -d --build`
+# Прод: заполнить .env и `docker compose pull && docker compose up -d` (образ собирается в CI).
+# Локально образ можно собрать самому: `docker compose up -d --build`.
+# Настроено под сервер 1 ГБ RAM: лимиты памяти и экономная конфигурация Postgres.
 services:
   bot:
+    image: ${BOT_IMAGE:-ghcr.io/qusar0/sut-bot:latest}
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://sutbot:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/sutbot
       REDIS_URL: redis://redis:6379/0
+    mem_limit: 400m
     ports:
-      - "127.0.0.1:8080:8080"  # наружу — через nginx/caddy с HTTPS
+      - "127.0.0.1:8080:8080"  # наружу — через Caddy/nginx с HTTPS
     depends_on:
       postgres:
         condition: service_healthy
@@ -21,10 +25,19 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # экономная конфигурация под 1 ГБ RAM
+    command: >-
+      postgres
+      -c max_connections=30
+      -c shared_buffers=96MB
+      -c effective_cache_size=256MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
     environment:
       POSTGRES_DB: sutbot
       POSTGRES_USER: sutbot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    mem_limit: 300m
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,11 +45,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # экономия памяти: журнал + лимит 64 МБ с вытеснением
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 90m
     volumes:
       - redisdata:/data
     healthcheck:
@@ -44,6 +62,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   pgdata:

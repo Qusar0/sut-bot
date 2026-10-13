@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/bot.db"
     admin_id: int | None = None
 
+    # Размер пула соединений к PostgreSQL. На сервере с 1 ГБ RAM держим небольшим (к нему ещё +max_overflow=5).
+    db_pool_size: int = 5
+
     # Сколько минут считать кэш недели свежим при просмотре
     schedule_cache_minutes: int = 30
     # Пауза между запросами к sut.ru при фоновом обходе, секунды
