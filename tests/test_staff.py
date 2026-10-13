@@ -49,7 +49,7 @@ class FakeClient:
             return read("faculty.html")
         if url.endswith("/ikd/prepodavatelskiy-sostav"):
             return read("staff_list.html")
-        if "777-gromov" in url:
+        if "777-gromov" in url or url.endswith("/gromova-test-testovna"):
             return read("staff_profile.html")
         raise RuntimeError("404")
 
@@ -89,3 +89,18 @@ def test_clean_person():
 
     assert clean_person("Климов Алексей -") == "Климов Алексей"
     assert short_name("Климов Алексей -") == "Климов А."
+
+
+def test_slug_candidates():
+    assert S.slug_candidates("Татаренков Дмитрий Александрович") == ["tatarenkov-dmitriy-aleksandrovich"]
+    assert S.slug_candidates("Климов Алексей Михайлович") == ["klimov-aleksey-mihaylovich"]
+    assert S.slug_candidates("Громов Владислав Витальевич") == ["gromov-vladislav-vitalevich"]
+
+
+async def test_probe_root_requires_name_match():
+    from bot.db.base import init_db
+
+    await init_db()
+    svc = StaffService(FakeClient())
+    # страница по адресу есть, но на ней другой человек — не подставляем
+    assert await svc.profile("Громова Тест Тестовна") is None

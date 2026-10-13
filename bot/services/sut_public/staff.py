@@ -92,3 +92,23 @@ def parse_profile(html: str, url: str = "") -> Profile:
         if m:
             p.education = re.sub(r"\s+", " ", m.group(1)).strip()
     return p
+
+
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i",
+    "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t",
+    "у": "u", "ф": "f", "х": "h", "ц": "c", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "",
+    "э": "e", "ю": "yu", "я": "ya",
+}  # fmt: skip
+
+
+def slug_candidates(full_name: str) -> list[str]:
+    """Адреса профиля в корне сайта, как их делает sut.ru: «Татаренков Дмитрий Александрович» →
+    tatarenkov-dmitriy-aleksandrovich. Для неоднозначных букв — запасной вариант."""
+    base = "".join(_TRANSLIT.get(ch, ch) for ch in full_name.lower())
+    base = re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+    variants = [base]
+    alt = base.replace("c", "ts").replace("tsh", "ch") if "ц" in full_name.lower() else None
+    if alt and alt not in variants:
+        variants.append(alt)
+    return variants

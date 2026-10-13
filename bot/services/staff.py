@@ -20,6 +20,7 @@ PROFILE_TTL = timedelta(days=7)
 class StaffService:
     def __init__(self, client: SutPublicClient):
         self.client = client
+        self._probed: set[str] = set()  # ФИО, для которых корневую страницу уже искали и не нашли
 
     async def count(self) -> int:
         async with Session() as s:
@@ -80,9 +81,37 @@ class StaffService:
         found = [r for r in rows if fits(r)]
         return found[0] if len(found) == 1 else None
 
+    async def _probe_root(self, s, full_name: str) -> StaffProfile | None:
+        """Запасной путь: у части сотрудников (завкафедрами, центры) профиль лежит в корне сайта."""
+        key = normalize(full_name)
+        if key in self._probed or len(key.split()) < 3:
+            return None
+        self._probed.add(key)
+        for slug in S.slug_candidates(full_name):
+            url = f"{S.SITE}/{slug}"
+            try:
+                html = await self.client.get_url(url, background=False)
+            except Exception:
+                continue
+            prof = S.parse_profile(html, url)
+            if normalize(prof.full_name) == key:
+                row = StaffProfile(
+                    key=key,
+                    full_name=prof.full_name,
+                    position=prof.position,
+                    url=url,
+                    data=prof.to_dict(),
+                    fetched_at=datetime.now(TZ),
+                    listed_at=datetime.now(TZ),
+                )
+                s.add(row)
+                await s.commit()
+                return row
+        return None
+
     async def profile(self, full_name: str) -> S.Profile | None:
         async with Session() as s:
-            row = await self._find(s, full_name)
+            row = await self._find(s, full_name) or await self._probe_root(s, full_name)
             if row is None:
                 return None
             fresh = row.fetched_at and datetime.now(TZ) - row.fetched_at.astimezone(TZ) < PROFILE_TTL
