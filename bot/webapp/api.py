@@ -155,10 +155,27 @@ def build_webapp(
         return web.json_response({"groups": [{"id": g.id, "name": g.name, "faculty": g.faculty} for g in found]})
 
     async def day(request: web.Request) -> web.Response:
+        from bot.render.image import counter_key, lesson_counters
+
         await _guard_consent(request)
         _, group = await _need_group(request)
         d = _parse_date(request.query.get("date"), today())
         week = await schedule.week(group.id, d)
+        try:
+            counters = lesson_counters([x for w in await schedule.semester(group.id) for x in w.lessons])
+        except Exception:
+            counters = {}
+
+        def day_kinds(day):
+            return sorted({KIND_KEY.get(kind_short(x.kind), "other") for x in week.by_day(day)})
+
+        lessons = []
+        for l in week.by_day(d):
+            item = _lesson(l)
+            cnt = counters.get(counter_key(l))
+            if cnt:
+                item["num"], item["of"] = cnt
+            lessons.append(item)
         return web.json_response(
             {
                 "date": d.isoformat(),
@@ -170,12 +187,12 @@ def build_webapp(
                         "date": (week.monday + timedelta(days=i)).isoformat(),
                         "weekday": WEEKDAYS[i][:2],
                         "day": (week.monday + timedelta(days=i)).day,
-                        "count": len(week.by_day(week.monday + timedelta(days=i))),
+                        "kinds": day_kinds(week.monday + timedelta(days=i)),
                         "active": (week.monday + timedelta(days=i)) == d,
                     }
                     for i in range(6)
                 ],
-                "lessons": [_lesson(l) for l in week.by_day(d)],
+                "lessons": lessons,
             }
         )
 

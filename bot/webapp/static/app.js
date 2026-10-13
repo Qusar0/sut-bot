@@ -28,6 +28,28 @@ function lessonCard(l) {
     <div class="subj">${esc(l.subject)}</div>${meta ? `<div class="meta">${meta}</div>` : ""}</div>`;
 }
 
+function nowHM() { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); }
+function toMin(hm) { const [h, m] = hm.split(":").map(Number); return h * 60 + m; }
+
+// карточка дня в стиле таймлайна: кружок пары, бейдж, «N из M», отсчёт
+function dayLesson(l, isToday) {
+  const cnt = l.of ? `<span class="count">${l.num} из ${l.of}</span>` : "";
+  const rows = [
+    l.teachers && `<div class="lrow">👤 ${esc(l.teachers)}</div>`,
+    l.room && `<div class="lrow">📍 ${esc(l.room)}</div>`,
+  ].filter(Boolean).join("");
+  let foot = "";
+  if (isToday) {
+    const s = toMin(l.start), e = toMin(l.end), n = nowHM();
+    if (n < s && s - n <= 90) foot = `<div class="foot soon">⏳ через ${s - n} мин</div>`;
+    else if (n >= s && n < e) foot = `<div class="foot now">● идёт · ещё ${e - n} мин</div>`;
+  }
+  return `<div class="tl ${l.kind_key} ${foot.includes("now") ? "active" : ""}">
+    <div class="tlleft"><div class="circle">${esc(l.pair)}</div><div class="tltime">${l.start}<br><span>${l.end}</span></div></div>
+    <div class="tlcard"><div class="tlhead"><span class="tag ${l.kind_key}">${KIND[l.kind_key] || esc(l.kind)}</span>${cnt}</div>
+      <div class="subj">${esc(l.subject)}</div>${rows}${foot}</div></div>`;
+}
+
 // --- экраны ---
 
 async function showDay() {
@@ -37,11 +59,15 @@ async function showDay() {
     state.date = d.date;
     $("h-title").textContent = d.title;
     $("h-sub").textContent = d.week_label;
-    strip.innerHTML = '<div class="strip">' + d.strip.map((x) =>
-      `<div class="d ${x.active ? "active" : ""} ${x.count ? "" : "empty"}" data-date="${x.date}">
-        <small>${x.weekday}</small><b>${x.day}</b><div class="dot"></div></div>`).join("") + "</div>";
+    const todayIso = state.me.today;
+    strip.innerHTML = '<div class="strip">' + d.strip.map((x) => {
+      const bars = (x.kinds || []).map((k) => `<i class="bar ${k}"></i>`).join("") || '<i class="bar none"></i>';
+      return `<div class="d ${x.active ? "active" : ""}" data-date="${x.date}">
+        <small>${x.weekday}</small><b>${x.day}</b><div class="bars">${bars}</div></div>`;
+    }).join("") + "</div>";
     strip.querySelectorAll(".d").forEach((el) => el.onclick = () => { state.date = el.dataset.date; showDay(); });
-    view.innerHTML = d.lessons.length ? d.lessons.map(lessonCard).join("") : '<div class="empty">Пар нет 🎉</div>';
+    const isToday = d.date === todayIso;
+    view.innerHTML = d.lessons.length ? d.lessons.map((l) => dayLesson(l, isToday)).join("") : '<div class="empty">Пар нет 🎉</div>';
   } catch (e) { handle(e); }
 }
 

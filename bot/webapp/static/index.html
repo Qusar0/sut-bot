@@ -28,8 +28,26 @@ header .sub{color:var(--hint);font-size:13px}
 .strip .d.active{background:var(--btn);color:var(--btn-text)}
 .strip .d small{display:block;font-size:11px;opacity:.7}
 .strip .d b{font-size:17px}
-.strip .d .dot{width:5px;height:5px;border-radius:50%;background:var(--lecture);margin:3px auto 0}
-.strip .d.empty .dot{background:transparent}
+.strip .d .bars{display:flex;gap:2px;justify-content:center;margin-top:4px;height:4px}
+.strip .d .bars .bar{width:10px;height:4px;border-radius:2px}
+.bar.lecture{background:var(--lecture)}.bar.practice{background:var(--practice)}.bar.lab{background:var(--lab)}.bar.other{background:var(--other)}.bar.none{background:transparent}
+.strip .d.active .bars .bar{background:rgba(255,255,255,.85)}
+/* таймлайн дня */
+.tl{display:flex;gap:10px;margin:10px 0}
+.tlleft{flex:0 0 52px;text-align:center;position:relative}
+.tlleft::before{content:"";position:absolute;left:50%;top:34px;bottom:-14px;width:2px;background:var(--sec);transform:translateX(-50%)}
+.tl:last-child .tlleft::before{display:none}
+.circle{width:34px;height:34px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;background:var(--other)}
+.tl.lecture .circle{background:var(--lecture)}.tl.practice .circle{background:var(--practice)}.tl.lab .circle{background:var(--lab)}
+.tltime{font-size:12px;color:var(--hint);margin-top:4px;font-variant-numeric:tabular-nums}
+.tltime span{color:var(--hint);opacity:.7}
+.tlcard{flex:1;background:var(--sec);border-radius:14px;padding:11px 13px}
+.tl.active .tlcard{box-shadow:0 0 0 2px var(--practice)}
+.tlhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.count{font-size:12px;color:var(--hint);font-variant-numeric:tabular-nums}
+.lrow{font-size:13px;color:var(--hint);margin-top:3px}
+.foot{font-size:12px;margin-top:6px;font-weight:600}
+.foot.soon{color:var(--lab)}.foot.now{color:var(--practice)}
 .card{background:var(--sec);border-radius:14px;padding:12px 14px;margin:10px 0;border-left:4px solid var(--other)}
 .card.lecture{border-color:var(--lecture)}.card.practice{border-color:var(--practice)}.card.lab{border-color:var(--lab)}
 .card .time{font-size:13px;color:var(--hint);font-variant-numeric:tabular-nums}
