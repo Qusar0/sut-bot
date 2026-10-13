@@ -27,7 +27,8 @@ def _links(node: LexborNode) -> list[tuple[str, str]]:
     for a in node.css("a[href]"):
         href = a.attributes.get("href") or ""
         if href and not href.startswith("javascript"):
-            out.append((_t(a) or href.rsplit("/", 1)[-1], href if href.startswith("http") else FILE_BASE + href))
+            url = href if href.startswith("http") else FILE_BASE + href.lstrip("/")
+            out.append((_t(a) or href.rsplit("/", 1)[-1], url))
     return out
 
 

@@ -7,3 +7,5 @@ _tmp = Path(tempfile.mkdtemp()) / "test.db"
 # TEST_DATABASE_URL позволяет прогнать тесты на PostgreSQL (так делает CI)
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite+aiosqlite:///{_tmp.as_posix()}"
 os.environ.setdefault("BOT_TOKEN", "0:test-token")
+# фиктивный ключ Fernet для тестов шифрования ЛК
+os.environ.setdefault("ENCRYPTION_KEY", "ILaL1xuoSf6IBp3J1WviOPWd44atAM_YqBcsOLYtEDU=")
