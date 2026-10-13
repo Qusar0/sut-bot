@@ -1,9 +1,9 @@
 """Выгрузка расписания в формате iCalendar (п. 32)."""
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from icalendar import Calendar, Event
+from icalendar import Alarm, Calendar, Event
 
 from bot.config import TZ
 from bot.render.text import kind_short, room_short
@@ -20,7 +20,25 @@ def _at(l: Lesson, hhmm: str) -> datetime:
     return datetime(l.day.year, l.day.month, l.day.day, h, m, tzinfo=TZ)
 
 
-def build_ics(group_name: str, weeks: list[Week]) -> bytes:
+KIND_BITS = {"Лекция": 1, "Практика": 2, "Лабораторная": 4}
+
+
+def _included(l: Lesson, kinds_mask: int, hidden: set[str]) -> bool:
+    bit = KIND_BITS.get(kind_short(l.kind), 0)
+    if bit and not kinds_mask & bit:
+        return False
+    return l.subject.split(" (")[0] not in hidden
+
+
+def build_ics(
+    group_name: str,
+    weeks: list[Week],
+    kinds_mask: int = 7,
+    hidden_subjects: list[str] | tuple[str, ...] = (),
+    alarm_minutes: int = 0,
+) -> bytes:
+    """Лента занятий. kinds_mask/hidden_subjects/alarm_minutes — настройки конструктора календаря."""
+    hidden = set(hidden_subjects)
     cal = Calendar()
     cal.add("prodid", "-//sut-bot//Расписание СПбГУТ//RU")
     cal.add("version", "2.0")
@@ -33,7 +51,7 @@ def build_ics(group_name: str, weeks: list[Week]) -> bytes:
     stamp = datetime.now(TZ)
     for w in weeks:
         for l in w.lessons:
-            if not l.start or not l.end:
+            if not l.start or not l.end or not _included(l, kinds_mask, hidden):
                 continue
             ev = Event()
             ev.add("uid", _uid(group_name, l))
@@ -48,5 +66,11 @@ def build_ics(group_name: str, weeks: list[Week]) -> bytes:
                 desc.append("Преподаватель: " + ", ".join(l.teachers))
             desc.append(f"Группа: {group_name}")
             ev.add("description", "\n".join(desc))
+            if alarm_minutes:
+                alarm = Alarm()
+                alarm.add("action", "DISPLAY")
+                alarm.add("description", l.subject)
+                alarm.add("trigger", timedelta(minutes=-alarm_minutes))
+                ev.add_component(alarm)
             cal.add_component(ev)
     return cal.to_ical()

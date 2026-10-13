@@ -13,12 +13,13 @@ log = logging.getLogger(__name__)
 def build_app(feeds: CalendarFeeds) -> web.Application:
     async def calendar(request: web.Request) -> web.Response:
         token = request.match_info["token"]
-        user = await user_by_token(token)
-        if user is None or not user.group_id:
+        found = await user_by_token(token)
+        if found is None or not found[0].group_id:
             raise web.HTTPNotFound()
+        user, prefs = found
         with metrics.timer("календарь: лента"):
             try:
-                data = await feeds.for_group(user.group_id)
+                data = await feeds.for_group(user.group_id, prefs)
             except Exception:
                 log.exception("лента календаря")
                 raise web.HTTPServiceUnavailable() from None

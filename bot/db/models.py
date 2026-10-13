@@ -134,6 +134,10 @@ class CalendarToken(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id", ondelete="CASCADE"), primary_key=True)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # конструктор календаря: типы занятий (биты: 1 лекции, 2 практики, 4 лабы), скрытые предметы, напоминание
+    kinds_mask: Mapped[int] = mapped_column(Integer, default=7, server_default="7")
+    hidden_subjects: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    alarm_minutes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class StaffProfile(Base):

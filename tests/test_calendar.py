@@ -38,3 +38,22 @@ async def test_token_reset():
     assert await get_token(777) == t1
     t2 = await get_token(777, reset=True)
     assert t2 != t1 and len(t2) >= 30
+
+
+def test_ics_filters_and_alarm():
+    data = build_ics("ИСТ-2633", [WEEK], kinds_mask=1, hidden_subjects=["Информатика"], alarm_minutes=15)
+    events = list(Calendar.from_ical(data).walk("VEVENT"))
+    kinds = {str(e["summary"]).rsplit("(", 1)[1] for e in events}
+    assert kinds == {"лекция)"}  # только лекции
+    assert not any(str(e["summary"]).startswith("Информатика") for e in events)
+    alarms = list(events[0].walk("VALARM"))
+    assert alarms and alarms[0].decoded("trigger").total_seconds() == -15 * 60
+
+
+async def test_prefs_survive_reset():
+    from bot.services.calendar import get_prefs, update_prefs
+
+    await update_prefs(777, kinds_mask=3, alarm_minutes=30, hidden_subjects=["Физическая культура и спорт"])
+    await get_token(777, reset=True)
+    p = await get_prefs(777)
+    assert (p.kinds_mask, p.alarm_minutes, p.hidden_subjects) == (3, 30, ("Физическая культура и спорт",))
