@@ -136,6 +136,17 @@ class LkService:
         async with Session() as s:
             return await s.get(LkAccount, tg_id)
 
+    async def close(self) -> None:
+        for sess in list(self._sessions.values()):
+            await sess.close()
+        self._sessions.clear()
+
+    async def linked_ids(self) -> list[int]:
+        from sqlalchemy import select
+
+        async with Session() as s:
+            return [r[0] for r in await s.execute(select(LkAccount.tg_id).where(LkAccount.status != "auth_failed"))]
+
     async def is_linked(self, tg_id: int) -> bool:
         return await self.account(tg_id) is not None
 

@@ -10,12 +10,13 @@ from aiogram.types import BotCommand
 from bot.broadcast import Broadcaster
 from bot.config import settings
 from bot.db.base import init_db
-from bot.handlers import admin, calendar, directory, legal, schedule, start
+from bot.handlers import admin, calendar, directory, legal, lk, schedule, start
 from bot.handlers import settings as settings_h
 from bot.middlewares import ConsentMiddleware, TimingMiddleware
 from bot.scheduler.jobs import Jobs
 from bot.services.calendar import CalendarFeeds
 from bot.services.directory import Directory
+from bot.services.lk.service import LkService
 from bot.services.schedule import ScheduleService
 from bot.services.staff import StaffService
 from bot.services.sut_public.client import SutPublicClient
@@ -51,7 +52,8 @@ async def main() -> None:
     directory_svc = Directory()
     schedule_svc = ScheduleService(client, directory_svc)
     staff_svc = StaffService(client)
-    jobs = Jobs(schedule_svc, Broadcaster(bot), staff_svc)
+    lk_svc = LkService()
+    jobs = Jobs(schedule_svc, Broadcaster(bot), staff_svc, lk_svc)
     await jobs.startup()
     scheduler = jobs.install()
 
@@ -59,6 +61,7 @@ async def main() -> None:
     dp["schedule"] = schedule_svc
     dp["directory"] = directory_svc
     dp["staff"] = staff_svc
+    dp["lk"] = lk_svc
     feeds = CalendarFeeds(schedule_svc)
     dp["calendar_feeds"] = feeds
     dp.message.outer_middleware(TimingMiddleware())
@@ -73,6 +76,7 @@ async def main() -> None:
         settings_h.router,
         schedule.router,
         calendar.router,
+        lk.router,
         directory.router,  # последним: ловит свободный текст
     )
 
@@ -95,6 +99,7 @@ async def main() -> None:
         await web_runner.cleanup()
         scheduler.shutdown(wait=False)
         await client.close()
+        await lk_svc.close()
         await bot.session.close()
 
 

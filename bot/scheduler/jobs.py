@@ -60,12 +60,14 @@ async def _recipients(*conditions) -> dict[int, list[Recipient]]:
 
 
 class Jobs:
-    def __init__(self, schedule: ScheduleService, broadcaster: Broadcaster, staff=None):
+    def __init__(self, schedule: ScheduleService, broadcaster: Broadcaster, staff=None, lk=None):
         self.schedule = schedule
         self.bc = broadcaster
         self.staff = staff
+        self.lk = lk
         self._staff_empty = False
         self._tasks: set[asyncio.Task] = set()
+        self._cold_done: str = ""  # дата последнего опроса «холодных» разделов ЛК
         schedule.on_change = self.on_change
 
     async def _send(self, recipients: list[Recipient], text: str, **kwargs) -> None:
@@ -233,6 +235,32 @@ class Jobs:
             if file_ref is None and msg is not None and msg.document:
                 file_ref = msg.document.file_id
 
+    # --- синхронизация ЛК (п. 34, 52–56, 58) ---
+
+    async def sync_lk(self) -> None:
+        if self.lk is None:
+            return
+        from bot.render.lk import render_news
+        from bot.services.lk.service import COLD, HOT
+
+        today_str = today().isoformat()
+        cold = self._cold_done != today_str
+        sections = HOT + COLD if cold else HOT
+        ids = await self.lk.linked_ids()
+        for tg_id in ids:
+            try:
+                news = await self.lk.sync(tg_id, sections)
+            except Exception:
+                log.warning("синхронизация ЛК %s не удалась", tg_id)
+                continue
+            quiet_now = is_quiet_time()
+            for section, items in news.items():
+                text = render_news(section, items)
+                if text:
+                    await self.bc.send(tg_id, text, disable_notification=quiet_now)
+        if cold and ids:
+            self._cold_done = today_str
+
     # --- запуск ---
 
     async def startup(self) -> None:
@@ -281,5 +309,7 @@ class Jobs:
             **opts,
         )
         sch.add_job(timed("проверка изменений", self.check_changes), cron(hour="7-22", minute="*/30"), **opts)
+        if self.lk is not None:
+            sch.add_job(timed("синхронизация ЛК", self.sync_lk), cron(hour="7-22", minute="*/15"), **opts)
         sch.start()
         return sch

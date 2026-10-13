@@ -15,6 +15,7 @@ class Btn:
     TEACHERS = "👩‍🏫 Преподаватели"
     SUBJECTS = "📚 Предметы"
     ROOMS = "🚪 Аудитории"
+    LK = "🏛 Личный кабинет"
     SETTINGS = "⚙️ Настройки"
     DOCS = "📄 Документы"
 
@@ -27,6 +28,7 @@ def main_menu() -> ReplyKeyboardMarkup:
             [b(text=Btn.WEEK), b(text=Btn.NEXT_WEEK)],
             [b(text=Btn.MONTH)],
             [b(text=Btn.TEACHERS), b(text=Btn.SUBJECTS), b(text=Btn.ROOMS)],
+            [b(text=Btn.LK)],
             [b(text=Btn.SETTINGS), b(text=Btn.DOCS)],
         ],
         resize_keyboard=True,
@@ -224,3 +226,52 @@ def subject_kb(idx: int, mask: int, present: list[str]) -> InlineKeyboardMarkup:
     rows = [row] if row else []
     rows.append([InlineKeyboardButton(text="⬅️ Все предметы", callback_data="subj:list")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# --- личный кабинет (п. 37–50) ---
+
+LK_SECTIONS = [
+    ("📔 Дневник", "diary"),
+    ("💬 Сообщения", "messages"),
+    ("📁 Файлы группы", "files"),
+    ("📒 Зачётка", "record_book"),
+    ("⚠️ Задолженности", "debts"),
+    ("🏆 Рейтинг", "rating"),
+    ("💰 Стипендии", "scholarships"),
+    ("📑 Приказы", "orders"),
+    ("📚 Учебный план", "plan"),
+    ("👤 Профиль", "profile"),
+]
+
+
+def lk_link_offer() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🔗 Подключить кабинет", callback_data="lk:link")]]
+    )
+
+
+def lk_cabinet() -> InlineKeyboardMarkup:
+    rows, row = [], []
+    for title, name in LK_SECTIONS:
+        row.append(InlineKeyboardButton(text=title, callback_data=f"lk:sec:{name}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="✅ Отметиться на паре", callback_data="lk:att")])
+    rows.append([InlineKeyboardButton(text="🔌 Отключить кабинет", callback_data="lk:unlink")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def lk_back() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ В кабинет", callback_data="lk:menu")]])
+
+
+def lk_unlink_confirm() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔌 Да, отключить", callback_data="lk:unlink:yes")],
+            [InlineKeyboardButton(text="Отмена", callback_data="lk:menu")],
+        ]
+    )
