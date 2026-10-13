@@ -22,13 +22,17 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl ufw ca-certificates
 
-echo "==> Swap 2 ГБ"
-if ! swapon --show | grep -q /swapfile; then
+echo "==> Swap"
+# многие образы Ubuntu уже идут со swap (/swap.img и т. п.) — второй файл только зря ест диск
+if [ -z "$(swapon --show)" ]; then
+  echo "   swap не найден — создаю 2 ГБ"
   fallocate -l 2G /swapfile
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
   swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+else
+  echo "   swap уже есть, пропускаю: $(swapon --show --noheadings | awk '{print $1}' | tr '\n' ' ')"
 fi
 sysctl -wq vm.swappiness=10
 echo 'vm.swappiness=10' > /etc/sysctl.d/99-swap.conf
