@@ -3,6 +3,7 @@
 Одна неделя группы запрашивается с сайта не чаще раза в `schedule_cache_minutes`,
 а параллельные запросы одной и той же недели склеиваются в один (важно при тысячах пользователей).
 """
+
 import asyncio
 import hashlib
 import json
@@ -54,7 +55,9 @@ def diff_lessons(group_id: int, monday: date, old: list[Lesson], new: list[Lesso
     removed = [old_k[k] for k in old_k.keys() - new_k.keys()]
     if not added and not removed:
         return None
-    return Diff(group_id, monday, sorted(added, key=lambda l: (l.day, l.start)), sorted(removed, key=lambda l: (l.day, l.start)))
+    return Diff(
+        group_id, monday, sorted(added, key=lambda l: (l.day, l.start)), sorted(removed, key=lambda l: (l.day, l.start))
+    )
 
 
 ChangeHandler = Callable[[Diff], Awaitable[None]]

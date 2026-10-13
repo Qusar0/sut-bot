@@ -1,4 +1,5 @@
 """HTTP-клиент открытого расписания sut.ru с ограничением частоты запросов."""
+
 import asyncio
 import time
 from datetime import date

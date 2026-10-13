@@ -1,0 +1,19 @@
+[project]
+name = "sut-bot"
+version = "0.1.0"
+description = "Открытый Telegram-бот для студентов СПбГУТ"
+requires-python = ">=3.12"
+license = "MIT"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+ignore = ["E741"]  # однобуквенное l для занятия (lesson) — осознанно
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

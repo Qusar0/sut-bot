@@ -1,4 +1,5 @@
 """Парсинг HTML открытого расписания sut.ru. Разметка описана в docs/recon.md."""
+
 import re
 from datetime import date, timedelta
 

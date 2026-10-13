@@ -10,7 +10,8 @@ from aiogram.types import BotCommand
 from bot.broadcast import Broadcaster
 from bot.config import settings
 from bot.db.base import init_db
-from bot.handlers import legal, schedule, settings as settings_h, start
+from bot.handlers import legal, schedule, start
+from bot.handlers import settings as settings_h
 from bot.middlewares import ConsentMiddleware
 from bot.scheduler.jobs import Jobs
 from bot.services.schedule import ScheduleService
@@ -25,8 +26,6 @@ COMMANDS = [
 
 
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    Path("data").mkdir(exist_ok=True)
     await init_db()
 
     bot = Bot(settings.bot_token.get_secret_value(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -53,4 +52,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    Path("data").mkdir(exist_ok=True)
     asyncio.run(main())

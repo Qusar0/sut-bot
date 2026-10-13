@@ -1,4 +1,5 @@
 """Юридические документы бота (п. 69). Тексты — черновики, перед публичным запуском проверить у юриста."""
+
 from dataclasses import dataclass
 from pathlib import Path
 

@@ -1,4 +1,5 @@
 """Старт, выбор и смена группы (п. 10)."""
+
 from html import escape
 
 from aiogram import F, Router
@@ -61,7 +62,9 @@ async def change_cb(cb: CallbackQuery, state: FSMContext) -> None:
 async def group_entered(message: Message, state: FSMContext) -> None:
     groups = await find_groups(message.text)
     if not groups:
-        await message.answer("Не нашёл такую группу. Проверьте номер и попробуйте ещё раз, например <code>ИСТ-2633</code>.")
+        await message.answer(
+            "Не нашёл такую группу. Проверьте номер и попробуйте ещё раз, например <code>ИСТ-2633</code>."
+        )
         return
     if len(groups) == 1:
         await _set_group(message, state, groups[0].id)

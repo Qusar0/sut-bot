@@ -1,4 +1,5 @@
 """Документы, согласие (п. 69) и удаление данных (п. 70)."""
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext

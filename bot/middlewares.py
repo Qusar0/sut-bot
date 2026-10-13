@@ -8,8 +8,7 @@ from bot.keyboards.main import consent_kb
 from bot.services.users import has_actual_consent
 
 CONSENT_TEXT = (
-    "Чтобы пользоваться ботом, нужно принять документы. "
-    "Откройте их кнопками ниже и нажмите «Принимаю все документы»."
+    "Чтобы пользоваться ботом, нужно принять документы. Откройте их кнопками ниже и нажмите «Принимаю все документы»."
 )
 
 _FREE_COMMANDS = ("/start", "/docs", "/delete")

@@ -1,4 +1,5 @@
 """Фоновые задачи: рассылки расписания (п. 8), поиск изменений (п. 9), обновление списка групп."""
+
 import logging
 from collections import defaultdict
 from datetime import timedelta
@@ -81,7 +82,9 @@ class Jobs:
 
     async def on_change(self, diff: Diff) -> None:
         group = await get_group(diff.group_id)
-        users = (await _users_by_group(User.notify_changes.is_(True), User.group_id == diff.group_id)).get(diff.group_id, [])
+        users = (await _users_by_group(User.notify_changes.is_(True), User.group_id == diff.group_id)).get(
+            diff.group_id, []
+        )
         if users:
             await self.bc.send_many(users, render_diff(group.name, diff))
 

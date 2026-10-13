@@ -1,4 +1,5 @@
 """Просмотр расписания группы (п. 1–5, 7)."""
+
 import logging
 from datetime import date, timedelta
 

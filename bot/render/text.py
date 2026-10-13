@@ -1,4 +1,5 @@
 """Текстовое оформление расписания (HTML-разметка Telegram)."""
+
 from datetime import date, timedelta
 from html import escape
 
@@ -7,8 +8,20 @@ from bot.services.sut_public.models import Lesson, Week
 
 WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
-              "сентября", "октября", "ноября", "декабря"]
+MONTHS_GEN = [
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+]
 
 MAX_LEN = 4000  # лимит Telegram — 4096
 
@@ -74,12 +87,16 @@ def render_day(group_name: str, week: Week, day: date) -> str:
 
 def _lesson_line(l: Lesson) -> str:
     tail = ", ".join(p for p in (room_str(l), l.teachers_short) if p)
-    return f"{kind_mark(l.kind)} {escape(l.pair)} {l.start} {escape(l.subject)}" + (f" — {escape(tail)}" if tail else "")
+    return f"{kind_mark(l.kind)} {escape(l.pair)} {l.start} {escape(l.subject)}" + (
+        f" — {escape(tail)}" if tail else ""
+    )
 
 
 def render_week(group_name: str, week: Week) -> str:
-    out = [f"<b>🗓 Неделя с {week.monday:%d.%m}</b>\n{escape(group_name)}"
-           + (f" · {week_label(week)}" if week_label(week) else "")]
+    out = [
+        f"<b>🗓 Неделя с {week.monday:%d.%m}</b>\n{escape(group_name)}"
+        + (f" · {week_label(week)}" if week_label(week) else "")
+    ]
     for i in range(6):
         d = week.monday + timedelta(days=i)
         lessons = week.by_day(d)
@@ -103,7 +120,9 @@ def render_period(group_name: str, lessons: list[Lesson], start: date, end: date
             if k in seen:
                 continue
             seen.add(k)
-            parts.append(f"{escape(l.pair)}·{escape(k[1])}{'' if kind_short(l.kind) == 'Практика' else ' (' + kind_short(l.kind).lower()[:3] + '.)'}")
+            kind = kind_short(l.kind)
+            suffix = "" if kind == "Практика" else f" ({kind.lower()[:3]}.)"
+            parts.append(f"{escape(l.pair)}·{escape(k[1])}{suffix}")
         blocks.append(f"<b>{WEEKDAYS_SHORT[d.weekday()]} {d:%d.%m}</b>: " + "; ".join(parts))
     header = f"<b>📆 {start:%d.%m} — {end:%d.%m}</b>\n{escape(group_name)}\n"
     if not blocks:

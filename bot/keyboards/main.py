@@ -38,7 +38,9 @@ def consent_kb() -> InlineKeyboardMarkup:
 
 def docs_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=f"📄 {d.title}", callback_data=f"legal:show:{d.code}")] for d in DOCUMENTS]
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"📄 {d.title}", callback_data=f"legal:show:{d.code}")] for d in DOCUMENTS
+        ]
     )
 
 
@@ -59,8 +61,12 @@ def day_nav(day: date) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text=f"{nxt:%d.%m} ➡️", callback_data=cb(nxt)),
             ],
             [
-                InlineKeyboardButton(text=f"⏪ {day - timedelta(days=7):%d.%m}", callback_data=cb(day - timedelta(days=7))),
-                InlineKeyboardButton(text=f"{day + timedelta(days=7):%d.%m} ⏩", callback_data=cb(day + timedelta(days=7))),
+                InlineKeyboardButton(
+                    text=f"⏪ {day - timedelta(days=7):%d.%m}", callback_data=cb(day - timedelta(days=7))
+                ),
+                InlineKeyboardButton(
+                    text=f"{day + timedelta(days=7):%d.%m} ⏩", callback_data=cb(day + timedelta(days=7))
+                ),
             ],
             [InlineKeyboardButton(text="🗓 Вся неделя", callback_data=f"w:{monday.isoformat()}")],
         ]
@@ -71,8 +77,12 @@ def week_nav(monday: date) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="⬅️ Неделя назад", callback_data=f"w:{(monday - timedelta(days=7)).isoformat()}"),
-                InlineKeyboardButton(text="Неделя вперёд ➡️", callback_data=f"w:{(monday + timedelta(days=7)).isoformat()}"),
+                InlineKeyboardButton(
+                    text="⬅️ Неделя назад", callback_data=f"w:{(monday - timedelta(days=7)).isoformat()}"
+                ),
+                InlineKeyboardButton(
+                    text="Неделя вперёд ➡️", callback_data=f"w:{(monday + timedelta(days=7)).isoformat()}"
+                ),
             ]
         ]
     )
