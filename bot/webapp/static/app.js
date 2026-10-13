@@ -195,18 +195,32 @@ async function showSearch() {
   chrome({ header: true }); $("h-title").textContent = "Поиск"; $("h-sub").textContent = "преподаватель или аудитория";
   view.innerHTML = '<input id="q" placeholder="Фамилия или номер аудитории" autocomplete="off"><div id="res"></div>';
   const q = $("q"), res = $("res");
-  q.focus();
+  const bind = () => res.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity(el.dataset.k, el.dataset.id));
+
+  async function showMine() {
+    try {
+      const d = await api("/api/my-teachers");
+      if (!d.teachers.length) { res.innerHTML = ""; return; }
+      res.innerHTML = '<div class="block">Мои преподаватели</div>' + d.teachers.map((t) =>
+        `<div class="row" data-k="teacher" data-id="${t.id}"><div><div>${esc(t.name)}</div>` +
+        `<div class="rowprog" style="white-space:normal">${esc(t.subjects)}</div></div><span class="hint">→</span></div>`).join("");
+      bind();
+    } catch (e) { res.innerHTML = ""; }
+  }
+  showMine();
+
   let timer;
   q.oninput = () => {
     clearTimeout(timer);
+    const val = q.value.trim();
+    if (val.length < 2) { showMine(); return; }
     timer = setTimeout(async () => {
-      if (q.value.trim().length < 2) { res.innerHTML = ""; return; }
       try {
-        const d = await api("/api/search?q=" + encodeURIComponent(q.value.trim()));
+        const d = await api("/api/search?q=" + encodeURIComponent(val));
         res.innerHTML = d.teachers.map((t) => `<div class="row" data-k="teacher" data-id="${t.id}">👩‍🏫 ${esc(t.name)}</div>`).join("") +
           d.rooms.map((r) => `<div class="row" data-k="room" data-id="${r.id}">🚪 ${esc(r.name)}</div>`).join("") ||
           '<div class="note">Ничего не найдено</div>';
-        res.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity(el.dataset.k, el.dataset.id));
+        bind();
       } catch (e) { handle(e); }
     }, 300);
   };

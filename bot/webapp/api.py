@@ -270,6 +270,23 @@ def build_webapp(
             rooms = [{"id": x.id, "name": room_label(x.room, x.building)} for x in directory.search_rooms(q, limit=8)]
         return web.json_response({"teachers": teachers, "rooms": rooms})
 
+    async def my_teachers(request: web.Request) -> web.Response:
+        """Преподаватели группы за семестр — показываются в поиске по умолчанию."""
+        await _guard_consent(request)
+        _, group = await _need_group(request)
+        weeks = await schedule.semester(group.id)
+        subjects: dict[str, set[str]] = {}
+        for w in weeks:
+            for l in w.lessons:
+                for t in l.teachers:
+                    subjects.setdefault(t, set()).add(l.subject.split(" (")[0])
+        out = []
+        for full in sorted(subjects):
+            t = directory.teacher_by_name(full)
+            if t is not None:
+                out.append({"id": t.id, "name": t.full_name, "subjects": ", ".join(sorted(subjects[full]))})
+        return web.json_response({"teachers": out})
+
     async def entity(request: web.Request) -> web.Response:
         await _guard_consent(request)
         kind, eid = request.match_info["kind"], int(request.match_info["id"])
@@ -455,6 +472,7 @@ def build_webapp(
     r.add_get("/api/subjects", subjects)
     r.add_get("/api/subject", subject)
     r.add_get("/api/search", search)
+    r.add_get("/api/my-teachers", my_teachers)
     r.add_get("/api/entity/{kind}/{id}", entity)
     r.add_get("/api/teacher/{id}/profile", teacher_profile)
     if STATIC.exists():
