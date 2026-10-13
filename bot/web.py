@@ -10,7 +10,7 @@ from bot.services.calendar import CalendarFeeds, user_by_token
 log = logging.getLogger(__name__)
 
 
-def build_app(feeds: CalendarFeeds) -> web.Application:
+def build_app(feeds: CalendarFeeds, webapp: dict | None = None) -> web.Application:
     async def calendar(request: web.Request) -> web.Response:
         token = request.match_info["token"]
         found = await user_by_token(token)
@@ -36,15 +36,21 @@ def build_app(feeds: CalendarFeeds) -> web.Application:
     app = web.Application()
     app.router.add_get("/cal/{token}.ics", calendar)
     app.router.add_get("/health", health)
+    if webapp:
+        from bot.webapp.api import build_webapp
+
+        build_webapp(app, webapp["schedule"], webapp["directory"], webapp["staff"], webapp.get("lk"))
     return app
 
 
 WEBHOOK_PATH = "/tg/webhook"
 
 
-async def start_web(feeds: CalendarFeeds, host: str, port: int, dp=None, bot=None, secret: str | None = None):
-    """Поднимает HTTP-сервер. Если переданы dp и bot — он же принимает вебхук Telegram."""
-    app = build_app(feeds)
+async def start_web(
+    feeds: CalendarFeeds, host: str, port: int, dp=None, bot=None, secret: str | None = None, webapp: dict | None = None
+):
+    """Поднимает HTTP-сервер. Если переданы dp и bot — он же принимает вебхук Telegram, а webapp — Mini App."""
+    app = build_app(feeds, webapp)
     if dp is not None and bot is not None:
         from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
