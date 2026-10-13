@@ -118,3 +118,13 @@ class IndexEntry(Base):
     kind: Mapped[str] = mapped_column(String(64))
     teacher_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("teachers.id"))
     room_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("rooms.id"))
+
+
+class CalendarToken(Base):
+    """Секретная ссылка на подписку календаря (п. 32). Сброс — новая строка вместо старой."""
+
+    __tablename__ = "calendar_tokens"
+
+    tg_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.tg_id", ondelete="CASCADE"), primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

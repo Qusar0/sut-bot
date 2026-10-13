@@ -10,13 +10,15 @@ from aiogram.types import BotCommand
 from bot.broadcast import Broadcaster
 from bot.config import settings
 from bot.db.base import init_db
-from bot.handlers import admin, directory, legal, schedule, start
+from bot.handlers import admin, calendar, directory, legal, schedule, start
 from bot.handlers import settings as settings_h
 from bot.middlewares import ConsentMiddleware, TimingMiddleware
 from bot.scheduler.jobs import Jobs
+from bot.services.calendar import CalendarFeeds
 from bot.services.directory import Directory
 from bot.services.schedule import ScheduleService
 from bot.services.sut_public.client import SutPublicClient
+from bot.web import start_web
 
 COMMANDS = [
     BotCommand(command="start", description="Главное меню"),
@@ -40,17 +42,29 @@ async def main() -> None:
     dp = Dispatcher()
     dp["schedule"] = schedule_svc
     dp["directory"] = directory_svc
+    feeds = CalendarFeeds(schedule_svc)
+    dp["calendar_feeds"] = feeds
     dp.message.outer_middleware(TimingMiddleware())
     dp.callback_query.outer_middleware(TimingMiddleware())
     dp.message.outer_middleware(ConsentMiddleware())
     dp.callback_query.outer_middleware(ConsentMiddleware())
     # Порядок важен: legal и start раньше, т.к. ловят состояние выбора группы и служебные кнопки
-    dp.include_routers(admin.router, legal.router, start.router, settings_h.router, schedule.router, directory.router)
+    dp.include_routers(
+        admin.router,
+        legal.router,
+        start.router,
+        settings_h.router,
+        schedule.router,
+        calendar.router,
+        directory.router,  # последним: ловит свободный текст
+    )
 
     await bot.set_my_commands(COMMANDS)
+    web_runner = await start_web(feeds, settings.web_host, settings.web_port)
     try:
         await dp.start_polling(bot)
     finally:
+        await web_runner.cleanup()
         scheduler.shutdown(wait=False)
         await client.close()
         await bot.session.close()

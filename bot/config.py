@@ -21,5 +21,10 @@ class Settings(BaseSettings):
     # Пауза между запросами к sut.ru, вызванными действиями пользователей, секунды
     interactive_delay: float = 0.2
 
+    # Веб-сервер для подписки на календарь (п. 32). Без PUBLIC_URL доступна только выгрузка файла.
+    public_url: str | None = None  # например https://bot.example.ru
+    web_host: str = "0.0.0.0"
+    web_port: int = 8080
+
 
 settings = Settings()

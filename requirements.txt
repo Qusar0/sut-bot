@@ -6,3 +6,5 @@ aiosqlite>=0.20
 pydantic-settings>=2.3
 APScheduler>=3.10,<4
 tzdata
+icalendar>=6
+aiohttp>=3.9

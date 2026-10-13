@@ -51,7 +51,10 @@ async def accept_documents(tg_id: int) -> None:
 
 async def delete_user_data(tg_id: int) -> None:
     """Полное удаление данных пользователя (п. 70). Новые таблицы с данными пользователя добавлять сюда."""
+    from bot.db.models import CalendarToken
+
     async with Session() as s:
+        await s.execute(delete(CalendarToken).where(CalendarToken.tg_id == tg_id))
         await s.execute(delete(Consent).where(Consent.tg_id == tg_id))
         await s.execute(delete(User).where(User.tg_id == tg_id))
         s.add(AuditLog(event="user_deleted", tg_id=tg_id))
