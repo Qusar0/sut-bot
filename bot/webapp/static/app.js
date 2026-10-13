@@ -132,7 +132,7 @@ async function showHome() {
     $("h-search").onclick = () => switchTab("search");
     const tiles = [
       ["📚", "Предметы", () => switchTab("subjects")],
-      ["🚪", "Аудитории", () => showRooms()],
+      ["🚪", "Аудитории", () => switchTab("search")],
       ["👩‍🏫", "Преподаватели", () => switchTab("search")],
       ["📅", "Неделя", () => { state.view = "week"; switchTab("day"); showWeek(); }],
     ];
@@ -224,84 +224,54 @@ function segment(mine, onMine, onAll) {
     `<button class="${mine ? "" : "primary"}" data-s="all">${onAll}</button></div>`;
 }
 
+function teacherRow(t) {
+  const sub = t.subjects ? `<div class="rowprog" style="white-space:normal">${esc(t.subjects)}</div>` : "";
+  return `<div class="row" data-k="teacher" data-id="${t.id}"><div style="flex:1"><div>👩‍🏫 ${esc(t.name)}</div>${sub}</div><span class="hint">→</span></div>`;
+}
+function roomRow(r) {
+  const extra = r.count ? `<span class="rowprog">${r.count} зан.</span>` : '<span class="hint">→</span>';
+  return `<div class="row" data-k="room" data-id="${r.id}"><span>🚪 ${esc(r.name)}</span>${extra}</div>`;
+}
+
+// единый поиск: преподаватели и аудитории двумя блоками; по умолчанию — «мои»
 async function showSearch() {
-  chrome({ header: true }); $("h-title").textContent = "Преподаватели"; $("h-sub").textContent = "";
-  let mine = true;
-  view.innerHTML = segment(true, "Мои", "Все") +
-    '<input id="q" placeholder="Поиск по фамилии" autocomplete="off" style="display:none"><div id="res"></div>';
+  chrome({ header: true }); $("h-title").textContent = "Поиск"; $("h-sub").textContent = "преподаватель или аудитория";
+  view.innerHTML = '<input id="q" placeholder="Фамилия или номер аудитории" autocomplete="off"><div id="res"></div>';
   const q = $("q"), res = $("res");
   const bind = () => res.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity(el.dataset.k, el.dataset.id));
 
   async function showMine() {
     try {
-      const d = await api("/api/my-teachers");
-      res.innerHTML = d.teachers.length ? d.teachers.map((t) =>
-        `<div class="row" data-k="teacher" data-id="${t.id}"><div><div>${esc(t.name)}</div>` +
-        `<div class="rowprog" style="white-space:normal">${esc(t.subjects)}</div></div><span class="hint">→</span></div>`).join("")
-        : '<div class="note">Не удалось собрать список.</div>';
+      const [t, r] = await Promise.all([api("/api/my-teachers"), api("/api/my-rooms")]);
+      let html = "";
+      if (t.teachers.length) html += '<div class="block">Мои преподаватели</div>' + t.teachers.map(teacherRow).join("");
+      if (r.rooms.length) html += '<div class="block">Мои аудитории</div>' + r.rooms.slice(0, 12).map(roomRow).join("");
+      res.innerHTML = html || '<div class="note">Не удалось собрать списки.</div>';
       bind();
     } catch (e) { res.innerHTML = ""; }
   }
-
-  function applyMode() {
-    view.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("primary", b.dataset.s === (mine ? "mine" : "all")));
-    q.style.display = mine ? "none" : "";
-    if (mine) { showMine(); } else { res.innerHTML = '<div class="note">Введите фамилию или номер аудитории.</div>'; q.focus(); }
-  }
-  view.querySelectorAll(".seg button").forEach((b) => b.onclick = () => { mine = b.dataset.s === "mine"; applyMode(); });
   showMine();
 
   let timer;
   q.oninput = () => {
     clearTimeout(timer);
     const val = q.value.trim();
-    if (val.length < 2) { res.innerHTML = ""; return; }
+    if (val.length < 1) { showMine(); return; }
+    if (val.length < 2) { return; }
     timer = setTimeout(async () => {
       try {
         const d = await api("/api/search?q=" + encodeURIComponent(val));
-        res.innerHTML = d.teachers.map((t) => `<div class="row" data-k="teacher" data-id="${t.id}">👩‍🏫 ${esc(t.name)}</div>`).join("") +
-          d.rooms.map((r) => `<div class="row" data-k="room" data-id="${r.id}">🚪 ${esc(r.name)}</div>`).join("") ||
-          '<div class="note">Ничего не найдено</div>';
+        let html = "";
+        if (d.teachers.length) html += '<div class="block">Преподаватели</div>' + d.teachers.map(teacherRow).join("");
+        if (d.rooms.length) html += '<div class="block">Аудитории</div>' + d.rooms.map(roomRow).join("");
+        res.innerHTML = html || '<div class="note">Ничего не найдено</div>';
         bind();
       } catch (e) { handle(e); }
     }, 300);
   };
 }
 
-async function showRooms() {
-  chrome({ header: true }); spin();
-  $("h-title").textContent = "Аудитории"; $("h-sub").textContent = "";
-  let data;
-  try { data = await api("/api/my-rooms"); } catch (e) { return handle(e); }
-  let mine = true;
-  view.innerHTML = segment(true, "Мои", "Все") +
-    '<input id="rq" placeholder="Поиск: 303, 501/2…" autocomplete="off" style="display:none"><div id="rres"></div>';
-  const rq = $("rq"), rres = $("rres");
-  const render = (rooms) => {
-    rres.innerHTML = rooms.length ? rooms.map((r) =>
-      `<div class="row" data-id="${r.id}"><span>🚪 ${esc(r.name)}</span>${r.count ? `<span class="rowprog">${r.count} зан.</span>` : '<span class="hint">→</span>'}</div>`).join("")
-      : '<div class="note">Ничего не найдено</div>';
-    rres.querySelectorAll(".row").forEach((el) => el.onclick = () => showEntity("room", el.dataset.id));
-  };
-  function applyMode() {
-    view.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("primary", b.dataset.s === (mine ? "mine" : "all")));
-    rq.style.display = mine ? "none" : "";
-    if (mine) { render(data.rooms); } else { rres.innerHTML = '<div class="note">Введите номер аудитории.</div>'; rq.focus(); }
-  }
-  view.querySelectorAll(".seg button").forEach((b) => b.onclick = () => { mine = b.dataset.s === "mine"; applyMode(); });
-  render(data.rooms);
-
-  let timer;
-  rq.oninput = () => {
-    clearTimeout(timer);
-    const v = rq.value.trim();
-    if (v.length < 1) { rres.innerHTML = ""; return; }
-    timer = setTimeout(async () => {
-      try { const sr = await api("/api/search?q=" + encodeURIComponent(v)); render(sr.rooms); }
-      catch (e) { handle(e); }
-    }, 300);
-  };
-}
+const showRooms = showSearch;  // плитка «Аудитории» ведёт в общий поиск
 
 async function showEntity(kind, id, date) {
   chrome({ header: true }); spin();
@@ -390,7 +360,7 @@ async function showLK() {
        <div class="sw ${st.auto_attendance ? "on" : ""}" id="lk-auto"><i></i></div></div>` +
     sections +
     `<div class="row" id="lk-unlink"><span>🔌 Отключить кабинет</span></div>`;
-  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : lkSection(r.dataset.sec, r.textContent)));
+  view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : r.dataset.sec === "messages" ? lkMessages() : lkSection(r.dataset.sec, r.textContent)));
   $("lk-att").onclick = lkAttendance;
   $("lk-unlink").onclick = async () => {
     if (tg && !(await new Promise((res) => tg.showConfirm("Отключить кабинет и удалить его данные?", res)))) return;
@@ -451,6 +421,53 @@ function lkSubjectDiary(s, back) {
     return `<div class="row" style="cursor:default"><span>${dd}.${m}</span>${markChip(e.value)}</div>`;
   }).join("");
   view.innerHTML = summary + rows;
+}
+
+async function lkMessages() {
+  chrome({ header: true }); spin(); backButton(showLK); $("h-title").textContent = "💬 Сообщения"; $("h-sub").textContent = "";
+  try {
+    const d = await api("/api/lk/messages");
+    if (!d.messages.length) { view.innerHTML = '<div class="empty">Сообщений нет.</div>'; return; }
+    view.innerHTML = d.messages.map((m, i) => {
+      const date = m.date ? m.date.slice(8, 10) + "." + m.date.slice(5, 7) : "";
+      const files = m.files.length ? " 📎" : "";
+      return `<div class="row" data-i="${i}"><div style="flex:1"><div>${esc(m.sender)}${files}</div>
+        <div class="rowprog" style="white-space:normal">${esc(m.subject)}</div></div><span class="hint">${date} →</span></div>`;
+    }).join("");
+    view.querySelectorAll(".row").forEach((r) => r.onclick = () => lkThread(d.messages[+r.dataset.i]));
+  } catch (e) { view.innerHTML = e.code === "no_group" ? "" : '<div class="empty">Сообщения недоступны.</div>'; }
+}
+
+async function lkThread(m) {
+  chrome({ header: true }); spin(); backButton(lkMessages);
+  $("h-title").textContent = esc(m.subject); $("h-sub").textContent = esc(m.sender);
+  try {
+    const t = await api("/api/lk/thread?id=" + m.id);
+    const bubbles = [];
+    if (t.body) bubbles.push(`<div class="bubble in"><div class="who">${esc(m.sender)}</div>${esc(t.body)}</div>`);
+    for (const h of t.history) {
+      bubbles.push(`<div class="bubble in"><div class="who">${esc(h.who)} · ${esc(h.date)}</div>${esc(h.text)}</div>`);
+    }
+    const files = m.files.map((f) => `<div><a href="${esc(f.url)}" target="_blank">📎 ${esc(f.name)}</a></div>`).join("");
+    const reply = t.can_reply
+      ? `<div class="replybox"><textarea id="reply" placeholder="Ответ преподавателю…" rows="2"></textarea>
+         <button class="mk" id="send">Отправить</button></div>`
+      : '<div class="note">На это сообщение нельзя ответить.</div>';
+    view.innerHTML = `<div class="chat">${bubbles.join("") || '<div class="note">Текст недоступен.</div>'}${files}</div>${reply}`;
+    if (t.can_reply) {
+      $("send").onclick = async () => {
+        const text = $("reply").value.trim();
+        if (!text) return;
+        if (tg && !(await new Promise((r) => tg.showConfirm("Отправить ответ преподавателю от вашего имени?", r)))) return;
+        $("send").textContent = "…"; $("send").disabled = true;
+        try {
+          await api("/api/lk/reply", { method: "POST", body: JSON.stringify({ id: m.id, text }) });
+          if (tg) tg.HapticFeedback.notificationOccurred("success");
+          lkThread(m);
+        } catch (e) { $("send").textContent = "Ошибка"; $("send").disabled = false; }
+      };
+    }
+  } catch (e) { view.innerHTML = '<div class="empty">Переписка недоступна.</div>'; }
 }
 
 async function lkSection(name, title) {

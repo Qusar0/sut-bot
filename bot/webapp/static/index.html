@@ -113,6 +113,14 @@ button.mk{background:var(--brand);color:#fff;border:none;border-radius:10px;padd
 .mk-chip.g{background:rgba(47,193,131,.2);color:var(--practice)}
 .mk-chip.a{background:rgba(255,91,91,.2);color:var(--lab)}
 .mk-chip.e{background:rgba(255,138,42,.2);color:var(--brand)}
+.chat{display:flex;flex-direction:column;gap:10px;margin-bottom:96px}
+.bubble{max-width:85%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.4;white-space:pre-wrap}
+.bubble.in{align-self:flex-start;background:var(--card);border-bottom-left-radius:5px}
+.bubble.out{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:5px}
+.bubble .who{font-size:11px;color:var(--hint);margin-bottom:3px}
+.bubble.out .who{color:rgba(255,255,255,.85)}
+.replybox{position:fixed;left:0;right:0;bottom:62px;background:var(--bg);display:flex;gap:8px;align-items:flex-end;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--sec);z-index:4}
+.replybox textarea{flex:1;resize:none;border-radius:14px;padding:10px 12px;background:var(--card);color:var(--text);border:none;font:inherit}
 .spin{text-align:center;color:var(--hint);padding:50px 0}
 
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid var(--sec);padding-bottom:env(safe-area-inset-bottom)}

@@ -345,3 +345,31 @@ def parse_mark_result(raw: str) -> str:
     except json.JSONDecodeError:
         return _t(LexborHTMLParser(raw).body) if raw else ""
     return re.sub(r"\s+", " ", LexborHTMLParser(f"<div>{data.get('data', '')}</div>").text()).strip()
+
+
+# --- переписка с преподавателем (п. 37) ---
+
+
+def _clean(html: str) -> str:
+    return re.sub(r"\s+", " ", LexborHTMLParser(f"<div>{html or ''}</div>").text()).strip()
+
+
+def parse_message_thread(body_raw: str, hist_raw: str) -> dict:
+    """Собирает тред: основной текст (prosmotr) + история переписки (history_show)."""
+    body, can_reply = "", False
+    try:
+        b = json.loads(body_raw)
+        body = _clean(b.get("annotation", ""))
+        can_reply = str(b.get("otvet", "0")) != "0"
+    except json.JSONDecodeError:
+        pass
+    history = []
+    try:
+        h = json.loads(hist_raw)
+        for item in h.get("history", []) or []:
+            text = _clean(item.get("annotation", ""))
+            if text:
+                history.append({"date": item.get("date", ""), "who": item.get("name_fizlico", ""), "text": text})
+    except json.JSONDecodeError:
+        pass
+    return {"body": body, "can_reply": can_reply, "history": history}

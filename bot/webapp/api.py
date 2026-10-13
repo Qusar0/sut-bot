@@ -448,6 +448,50 @@ def build_webapp(
                 out.append({"name": name, "entries": entries, "grades": grades, "absences": absences})
             return web.json_response({"subjects": out})
 
+        async def lk_messages(request: web.Request) -> web.Response:
+            """Список переписок (тема, отправитель, дата, есть ли файлы)."""
+            from bot.services.lk.service import NotLinked
+
+            try:
+                msgs = await lk.section(request["tg_id"], "messages")
+            except NotLinked:
+                raise web.HTTPConflict(text="not linked") from None
+            except Exception:
+                raise web.HTTPServiceUnavailable() from None
+            out = [
+                {
+                    "id": m.id,
+                    "subject": m.subject or "Без темы",
+                    "sender": m.sender,
+                    "date": m.at.isoformat() if m.at else "",
+                    "files": [{"name": n, "url": u} for n, u in m.files],
+                }
+                for m in msgs
+            ]
+            return web.json_response({"messages": out})
+
+        async def lk_thread(request: web.Request) -> web.Response:
+            mid = int(request.query.get("id", "0"))
+            if not mid:
+                raise web.HTTPBadRequest(text="no id")
+            try:
+                thread = await lk.message_thread(request["tg_id"], mid)
+            except Exception:
+                raise web.HTTPServiceUnavailable() from None
+            return web.json_response(thread)
+
+        async def lk_reply(request: web.Request) -> web.Response:
+            body = await request.json()
+            mid = int(body.get("id", "0"))
+            text = (body.get("text") or "").strip()
+            if not mid or not text:
+                raise web.HTTPBadRequest(text="empty")
+            try:
+                ok = await lk.send_reply(request["tg_id"], mid, text)
+            except Exception:
+                raise web.HTTPServiceUnavailable() from None
+            return web.json_response({"ok": ok})
+
         async def lk_attendance(request: web.Request) -> web.Response:
             from bot.services.lk.service import NotLinked
 
@@ -494,6 +538,9 @@ def build_webapp(
         r.add_post("/api/lk/unlink", lk_unlink)
         r.add_get("/api/lk/section", lk_section)
         r.add_get("/api/lk/diary", lk_diary)
+        r.add_get("/api/lk/messages", lk_messages)
+        r.add_get("/api/lk/thread", lk_thread)
+        r.add_post("/api/lk/reply", lk_reply)
         r.add_get("/api/lk/attendance", lk_attendance)
         r.add_post("/api/lk/mark", lk_mark)
         r.add_post("/api/lk/auto", lk_auto)

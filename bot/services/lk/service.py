@@ -261,6 +261,33 @@ class LkService:
             raw = await sess.post("project/cabinet/forms/raspisanie.php", {"open": "3", "rasp": rasp})
         return P.parse_mark_result(raw)
 
+    # --- переписка с преподавателем (п. 37) ---
+
+    async def message_thread(self, tg_id: int, mid: int) -> dict:
+        """Текст сообщения и история переписки. prosmotr отмечает сообщение прочитанным."""
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            body_raw = await sess.post("project/cabinet/forms/sendto2.php", {"id": str(mid), "prosmotr": ""})
+            hist_raw = await sess.post("project/cabinet/forms/sendto2.php", {"id": str(mid), "history_show": ""})
+        return P.parse_message_thread(body_raw, hist_raw)
+
+    async def send_reply(self, tg_id: int, mid: int, text: str) -> bool:
+        """Отправляет ответ преподавателю (действие в ЛК от имени студента, по явной команде)."""
+        text = text.strip()
+        if not text:
+            return False
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            await sess.post(
+                "project/cabinet/forms/message.php",
+                {"item": str(mid), "idinfo": "0", "mes_otvet": text, "saveotv": ""},
+            )
+        from bot import metrics
+
+        metrics.inc("ЛК: ответ преподавателю")
+        self._cache.pop((tg_id, "messages"), None)
+        return True
+
     async def set_auto(self, tg_id: int, on: bool) -> None:
         async with Session() as s:
             acc = await s.get(LkAccount, tg_id)
