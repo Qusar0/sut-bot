@@ -11,5 +11,6 @@ __pycache__/
 *.db-shm
 
 # Прокси для sut.ru (секрет VPN, генерируется на сервере)
-singbox/
+xray/
 proxy.txt
+proxy.json

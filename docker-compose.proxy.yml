@@ -1,16 +1,15 @@
-# Прокси для sut.ru через sing-box, когда прямой IP сервера заблокирован вузом.
+# Прокси для sut.ru через Xray, когда прямой IP сервера заблокирован вузом.
 # Включается на сервере добавлением в .env:
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
 #   SUT_PROXY=socks5h://proxy:1080
-# Конфиг sing-box кладётся в ./singbox/config.json (генерируется scripts/vless_to_singbox.py,
-# в git не коммитится — там секрет VPN). Локально этот файл не подключается, прокси не запускается.
+# Конфиг Xray кладётся в ./xray/config.json (делается scripts/make_xray_proxy.py из экспорта
+# «Копировать JSON» в Happ; в git не коммитится — там секрет VPN). Локально не подключается.
 services:
   proxy:
-    image: ghcr.io/sagernet/sing-box:v1.11.15
+    image: teddysun/xray:26.10.10
     restart: unless-stopped
-    command: ["run", "-c", "/etc/sing-box/config.json"]
     volumes:
-      - ./singbox/config.json:/etc/sing-box/config.json:ro
+      - ./xray/config.json:/etc/xray/config.json:ro
     mem_limit: 90m
     logging:
       driver: json-file

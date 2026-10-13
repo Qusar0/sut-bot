@@ -76,12 +76,13 @@ docker compose exec -T postgres pg_dump -U sutbot sutbot | gzip > /opt/backup/su
 
 sut.ru может резать TCP 80/443 с зарубежных/хостинговых IP (проверка: `curl --max-time 10 https://www.sut.ru/`
 — таймаут, при этом `ya.ru` открывается). Тогда запросы к sut.ru/lk.sut.ru пускаем через прокси в разрешённой
-сети (sing-box с рабочим VLESS/Reality-конфигом). Поднимается рядом в `docker-compose.proxy.yml`.
+сети (Xray с рабочим конфигом, выход которого sut.ru пускает). Поднимается рядом в `docker-compose.proxy.yml`.
 
+Нужен рабочий конфиг VLESS/Reality и т. п., выход которого достаёт sut.ru (проверить заранее). Экспорт из
+клиента (в Happ — «Копировать JSON») сохранить в `/opt/sut-bot/proxy.json`, затем:
 ```bash
-# из рабочей VLESS-ссылки (один сервер) сделать конфиг sing-box
-mkdir -p /opt/sut-bot/singbox
-python3 /opt/sut-bot/scripts/vless_to_singbox.py "$(cat /opt/sut-bot/proxy.txt)" /opt/sut-bot/singbox/config.json
+mkdir -p /opt/sut-bot/xray
+python3 /opt/sut-bot/scripts/make_xray_proxy.py /opt/sut-bot/proxy.json /opt/sut-bot/xray/config.json
 ```
 
 В `.env` добавить:
@@ -92,9 +93,10 @@ SUT_PROXY=socks5h://proxy:1080
 Поднять и проверить, что через прокси sut.ru доступен:
 ```bash
 cd /opt/sut-bot && docker compose up -d
-docker compose exec proxy sh -c "wget -qO- --timeout=15 https://www.sut.ru/ >/dev/null && echo OK || echo FAIL"
+docker run --rm --network sut-bot_default curlimages/curl -sS -x socks5h://proxy:1080 \
+  -o /dev/null -w "%{http_code}\n" --max-time 20 https://www.sut.ru/
 ```
-`singbox/config.json` и `proxy.txt` содержат секрет VPN — в git не попадают (см. `.gitignore`).
+`xray/config.json` и `proxy.json` содержат секрет VPN — в git не попадают (см. `.gitignore`).
 
 ## 8. Автоматическая выкладка из CI
 
