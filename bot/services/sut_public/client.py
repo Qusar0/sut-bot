@@ -55,9 +55,18 @@ class SutPublicClient:
             t0 = time.perf_counter()
             try:
                 r = await self._http.get(url, params=params)
+                if 400 <= r.status_code < 500:
+                    metrics.inc("sut.ru: нет страницы")
+                    r.raise_for_status()  # 404 и т. п. повторять бессмысленно
                 r.raise_for_status()
                 metrics.observe("sut.ru: запрос", time.perf_counter() - t0)
                 return r.text
+            except httpx.HTTPStatusError as e:
+                if 400 <= e.response.status_code < 500:
+                    raise
+                metrics.inc("sut.ru: ошибка")
+                last_exc = e
+                await asyncio.sleep(2**attempt)
             except httpx.HTTPError as e:
                 metrics.inc("sut.ru: ошибка")
                 last_exc = e

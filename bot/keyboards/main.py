@@ -72,7 +72,10 @@ def day_nav(day: date) -> InlineKeyboardMarkup:
                     text=f"{day + timedelta(days=7):%d.%m} ⏩", callback_data=cb(day + timedelta(days=7))
                 ),
             ],
-            [InlineKeyboardButton(text="🗓 Вся неделя", callback_data=f"w:{monday.isoformat()}")],
+            [
+                InlineKeyboardButton(text="🗓 Вся неделя", callback_data=f"w:{monday.isoformat()}"),
+                InlineKeyboardButton(text="🖼 Картинкой", callback_data=f"img:{day.isoformat()}"),
+            ],
         ]
     )
 

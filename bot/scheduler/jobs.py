@@ -146,7 +146,7 @@ class Jobs:
         sch.add_job(
             timed("профили преподавателей", self.refresh_staff),
             CronTrigger(day_of_week="mon", hour=5, minute=0, timezone=TZ),
-            next_run_time=datetime.now(TZ) + timedelta(minutes=2) if staff_empty else None,
+            next_run_time=datetime.now(TZ) + timedelta(seconds=20) if staff_empty else None,
             **opts,
         )
         sch.add_job(

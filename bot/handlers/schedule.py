@@ -1,16 +1,19 @@
-"""Просмотр расписания группы (п. 1–5, 7)."""
+"""Просмотр расписания группы (п. 1–7)."""
 
+import asyncio
 import logging
 from datetime import date, timedelta
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
+from bot import metrics
 from bot.handlers.start import ask_group
 from bot.keyboards.main import Btn, day_nav, month_calendar, week_nav
-from bot.render.text import render_day, render_period, render_week
+from bot.render.image import lesson_counters, render_day_image
+from bot.render.text import render_day, render_period, render_week, week_label
 from bot.services.schedule import ScheduleService, monday_of, today
 from bot.services.users import get_group, get_user
 
@@ -109,6 +112,39 @@ async def day_new_cb(cb: CallbackQuery, state: FSMContext, schedule: ScheduleSer
     """Нажатие на день в календаре месяца — новым сообщением, чтобы календарь остался."""
     await cb.answer()
     await _send_day(cb.message, state, schedule, date.fromisoformat(cb.data[3:]), tg_id=cb.from_user.id)
+
+
+_images: dict[tuple, bytes] = {}  # (группа, день, состав пар) -> PNG
+
+
+@router.callback_query(F.data.startswith("img:"))
+async def day_image_cb(cb: CallbackQuery, state: FSMContext, schedule: ScheduleService) -> None:
+    """Расписание дня картинкой (п. 6)."""
+    group = await _group(cb.from_user.id)
+    if group is None:
+        await cb.answer()
+        await ask_group(cb.message, state)
+        return
+    day = date.fromisoformat(cb.data[4:])
+    await cb.answer("Рисую…")
+    try:
+        week = await schedule.week(group.id, day)
+        lessons = week.by_day(day)
+        key = (group.id, day, tuple(l.key() for l in lessons))
+        png = _images.get(key)
+        if png is None:
+            semester = await schedule.semester(group.id)
+            counters = lesson_counters([l for w in semester for l in w.lessons])
+            with metrics.timer("картинка: рисование"):
+                png = await asyncio.to_thread(render_day_image, group.name, day, lessons, week_label(week), counters)
+            if len(_images) > 500:
+                _images.clear()
+            _images[key] = png
+    except Exception:
+        log.exception("картинка расписания")
+        await cb.message.answer(UNAVAILABLE)
+        return
+    await cb.message.answer_photo(BufferedInputFile(png, filename=f"{day.isoformat()}.png"), reply_markup=day_nav(day))
 
 
 @router.callback_query(F.data == "noop")
