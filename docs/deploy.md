@@ -45,19 +45,25 @@ docker compose logs -f bot
 
 `DATABASE_URL` и `REDIS_URL` docker-compose подставляет сам.
 
-## 4. HTTPS (Caddy — сертификат получает сам)
+## 4. HTTPS (Caddy в Docker — сертификат получает сам)
 
-```bash
-apt install -y caddy
-cat >/etc/caddy/Caddyfile <<'CADDY'
-bot.example.ru {
-    reverse_proxy 127.0.0.1:8080
-}
-CADDY
-systemctl reload caddy
+Нужно для webhook, Mini App и подписки на календарь. Домен должен A-записью указывать на сервер; без своего
+домена подойдёт `46.38.156.87.sslip.io` (sslip.io резолвит IP из имени, регистрация не нужна).
+
+В `.env` добавить (к уже существующему `COMPOSE_FILE` допишите через `:` файл caddy):
 ```
-
-Проверка: `curl https://bot.example.ru/health` → `ok`.
+COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml:docker-compose.caddy.yml
+CADDY_DOMAIN=46.38.156.87.sslip.io
+PUBLIC_URL=https://46.38.156.87.sslip.io
+USE_WEBHOOK=true
+```
+Поднять и проверить:
+```bash
+cd /opt/sut-bot && docker compose up -d
+curl -fsS https://$CADDY_DOMAIN/health   # -> ok (через минуту после выдачи сертификата)
+```
+Caddy сам получит и будет продлевать сертификат. Бот при `PUBLIC_URL`+`USE_WEBHOOK=true` сам переключится
+на webhook и включит кнопку Mini App.
 
 ## 5. Обновление
 

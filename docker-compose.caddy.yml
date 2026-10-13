@@ -1,0 +1,30 @@
+# HTTPS-фронт через Caddy (авто-сертификат Let's Encrypt) для webhook, Mini App и подписки на календарь.
+# Включается на сервере добавлением в .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml:docker-compose.caddy.yml
+#   CADDY_DOMAIN=<домен или 46.38.156.87.sslip.io>
+#   PUBLIC_URL=https://<тот же домен>
+#   USE_WEBHOOK=true
+# Домен должен A-записью указывать на сервер. Caddy сам получит и продлит сертификат.
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:?задайте CADDY_DOMAIN в .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    mem_limit: 80m
+    depends_on:
+      - bot
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  caddydata:
+  caddyconfig:

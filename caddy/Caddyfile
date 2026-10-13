@@ -1,0 +1,5 @@
+# Домен берётся из переменной окружения CADDY_DOMAIN (задаётся в .env).
+# Весь трафик проксируется на бот (его веб-сервер: webhook, Mini App /app, календарь /cal, /health).
+{$CADDY_DOMAIN} {
+	reverse_proxy bot:8080
+}
