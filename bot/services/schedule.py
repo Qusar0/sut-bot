@@ -11,6 +11,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from bot import metrics
 from bot.config import TZ, settings
@@ -19,7 +20,12 @@ from bot.db.models import WeekSnapshot
 from bot.services.sut_public.client import SutPublicClient
 from bot.services.sut_public.models import Lesson, Week
 
+if TYPE_CHECKING:
+    from bot.services.directory import Directory
+
 log = logging.getLogger(__name__)
+
+SEMESTER_WEEKS = 22  # с запасом: 17–18 учебных недель + сессия
 
 
 def monday_of(d: date) -> date:
@@ -63,8 +69,9 @@ ChangeHandler = Callable[[Diff], Awaitable[None]]
 
 
 class ScheduleService:
-    def __init__(self, client: SutPublicClient):
+    def __init__(self, client: SutPublicClient, directory: "Directory | None" = None):
         self.client = client
+        self.directory = directory
         self.on_change: ChangeHandler | None = None
         self._inflight: dict[tuple[int, date], asyncio.Future] = {}
         # Горячий кэш в памяти: (группа, понедельник) -> (неделя, когда получена). Без похода в БД.
@@ -74,7 +81,10 @@ class ScheduleService:
     async def week(self, group_id: int, day: date, max_age: timedelta | None = None, background: bool = False) -> Week:
         monday = monday_of(day)
         key = (group_id, monday)
-        max_age = max_age if max_age is not None else timedelta(minutes=settings.schedule_cache_minutes)
+        if max_age is None:
+            # Прошедшие недели почти не меняются — держим их неделю
+            past = monday < monday_of(today())
+            max_age = timedelta(days=7) if past else timedelta(minutes=settings.schedule_cache_minutes)
         now = datetime.now(TZ)
 
         if (hit := self._mem.get(key)) and now - hit[1] < max_age:
@@ -133,6 +143,11 @@ class ScheduleService:
             snap.fetched_at = datetime.now(TZ)
             await s.commit()
         self._mem[(group_id, monday)] = (week, snap.fetched_at)
+        if self.directory is not None:
+            try:
+                await self.directory.update(group_id, monday, week.lessons)
+            except Exception:
+                log.exception("не удалось обновить индекс %s %s", group_id, monday)
         # Об изменениях прошлых недель не сообщаем. Рассылку запускаем фоном, чтобы не задерживать ответ.
         if diff and self.on_change and monday >= monday_of(today()):
             metrics.inc("изменения найдены")
@@ -147,14 +162,28 @@ class ScheduleService:
         except Exception:
             log.exception("ошибка рассылки изменений")
 
-    async def weeks_between(self, group_id: int, start: date, end: date) -> list[Week]:
+    async def weeks_between(
+        self, group_id: int, start: date, end: date, max_age: timedelta | None = None
+    ) -> list[Week]:
         """Недели, покрывающие интервал; загружаются параллельно."""
         mondays = []
         m = monday_of(start)
         while m <= end:
             mondays.append(m)
             m += timedelta(days=7)
-        return list(await asyncio.gather(*(self.week(group_id, m) for m in mondays)))
+        return list(await asyncio.gather(*(self.week(group_id, m, max_age=max_age) for m in mondays)))
+
+    async def semester(self, group_id: int) -> list[Week]:
+        """Все недели текущего семестра группы. Начало вычисляем по номеру текущей учебной недели."""
+        current = await self.week(group_id, today())
+        number = current.number or 1
+        start = current.monday - timedelta(weeks=number - 1)
+        end = start + timedelta(weeks=SEMESTER_WEEKS - 1)
+        weeks = await self.weeks_between(group_id, start, end, max_age=timedelta(hours=6))
+        # Хвост после последней недели с занятиями отрезаем
+        while weeks and not weeks[-1].lessons and weeks[-1].monday > current.monday:
+            weeks.pop()
+        return weeks
 
 
 def _week_from_snapshot(snap: WeekSnapshot) -> Week:

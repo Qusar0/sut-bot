@@ -115,3 +115,7 @@ async def save_groups(groups) -> None:
 
 async def groups_count() -> int:
     return len(await _all_groups())
+
+
+async def all_group_ids() -> list[int]:
+    return [g.id for g in await _all_groups()]

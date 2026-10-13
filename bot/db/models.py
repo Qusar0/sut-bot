@@ -1,6 +1,18 @@
 from datetime import date, datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bot.db.base import Base
@@ -62,3 +74,47 @@ class AuditLog(Base):
     event: Mapped[str] = mapped_column(String(32))
     tg_id: Mapped[int] = mapped_column(BigInteger)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Teacher(Base):
+    __tablename__ = "teachers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(128), unique=True)
+    short_name: Mapped[str] = mapped_column(String(64))
+
+
+class Room(Base):
+    __tablename__ = "rooms"
+    __table_args__ = (UniqueConstraint("room", "building"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    room: Mapped[str] = mapped_column(String(64))
+    building: Mapped[str] = mapped_column(String(32), default="")
+
+
+class IndexEntry(Base):
+    """Плоский индекс занятий всех групп: по нему строятся расписания преподавателей и аудиторий.
+
+    Одна строка — одно занятие одной группы с одним преподавателем (teacher_id может быть NULL).
+    Перезаписывается целиком для пары (группа, неделя) при каждом обновлении недели.
+    """
+
+    __tablename__ = "lesson_index"
+    __table_args__ = (
+        Index("ix_index_teacher_day", "teacher_id", "day"),
+        Index("ix_index_room_day", "room_id", "day"),
+        Index("ix_index_group_week", "group_id", "monday"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer)
+    monday: Mapped[date] = mapped_column(Date)
+    day: Mapped[date] = mapped_column(Date)
+    pair: Mapped[str] = mapped_column(String(8))
+    start: Mapped[str] = mapped_column(String(5))
+    end: Mapped[str] = mapped_column(String(5))
+    subject: Mapped[str] = mapped_column(String(256))
+    kind: Mapped[str] = mapped_column(String(64))
+    teacher_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("teachers.id"))
+    room_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("rooms.id"))

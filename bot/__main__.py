@@ -10,10 +10,11 @@ from aiogram.types import BotCommand
 from bot.broadcast import Broadcaster
 from bot.config import settings
 from bot.db.base import init_db
-from bot.handlers import admin, legal, schedule, start
+from bot.handlers import admin, directory, legal, schedule, start
 from bot.handlers import settings as settings_h
 from bot.middlewares import ConsentMiddleware, TimingMiddleware
 from bot.scheduler.jobs import Jobs
+from bot.services.directory import Directory
 from bot.services.schedule import ScheduleService
 from bot.services.sut_public.client import SutPublicClient
 
@@ -30,19 +31,21 @@ async def main() -> None:
 
     bot = Bot(settings.bot_token.get_secret_value(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     client = SutPublicClient(interval=settings.crawl_delay, interactive_interval=settings.interactive_delay)
-    schedule_svc = ScheduleService(client)
+    directory_svc = Directory()
+    schedule_svc = ScheduleService(client, directory_svc)
     jobs = Jobs(schedule_svc, Broadcaster(bot))
     await jobs.startup()
     scheduler = jobs.install()
 
     dp = Dispatcher()
     dp["schedule"] = schedule_svc
+    dp["directory"] = directory_svc
     dp.message.outer_middleware(TimingMiddleware())
     dp.callback_query.outer_middleware(TimingMiddleware())
     dp.message.outer_middleware(ConsentMiddleware())
     dp.callback_query.outer_middleware(ConsentMiddleware())
     # Порядок важен: legal и start раньше, т.к. ловят состояние выбора группы и служебные кнопки
-    dp.include_routers(admin.router, legal.router, start.router, settings_h.router, schedule.router)
+    dp.include_routers(admin.router, legal.router, start.router, settings_h.router, schedule.router, directory.router)
 
     await bot.set_my_commands(COMMANDS)
     try:

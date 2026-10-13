@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -81,6 +81,21 @@ class Jobs:
                 except Exception:
                     log.warning("проверка изменений: группа %s неделя %s недоступна", gid, m)
 
+    async def crawl_all(self) -> None:
+        """Обход всех групп на текущую и следующую неделю — для расписаний преподавателей и аудиторий."""
+        from bot.services.users import all_group_ids
+
+        monday = monday_of(today())
+        ok = failed = 0
+        for gid in await all_group_ids():
+            for m in (monday, monday + timedelta(days=7)):
+                try:
+                    await self.schedule.week(gid, m, max_age=timedelta(hours=2), background=True)
+                    ok += 1
+                except Exception:
+                    failed += 1
+        log.info("обход групп завершён: %d недель, ошибок %d", ok, failed)
+
     async def on_change(self, diff: Diff) -> None:
         group = await get_group(diff.group_id)
         users = (await _users_by_group(User.notify_changes.is_(True), User.group_id == diff.group_id)).get(
@@ -92,6 +107,10 @@ class Jobs:
     async def startup(self) -> None:
         if await groups_count() == 0:
             await self.refresh_groups()
+        if self.schedule.directory is not None:
+            await self.schedule.directory.load()
+            if n := await self.schedule.directory.rebuild_if_empty():
+                log.info("индекс построен из %d сохранённых недель", n)
 
     def install(self) -> AsyncIOScheduler:
         sch = AsyncIOScheduler(timezone=TZ)
@@ -109,6 +128,12 @@ class Jobs:
         sch.add_job(
             timed("на неделю", self.send_next_week),
             CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=TZ),
+            **opts,
+        )
+        sch.add_job(
+            timed("обход всех групп", self.crawl_all),
+            CronTrigger(hour="6-21/3", minute=15, timezone=TZ),
+            next_run_time=datetime.now(TZ) + timedelta(seconds=30),  # и сразу после запуска
             **opts,
         )
         sch.add_job(
