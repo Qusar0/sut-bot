@@ -146,6 +146,12 @@ nav button .ic{font-size:21px;display:block;margin-bottom:1px}
   <button data-tab="search"><span class="ic">🔎</span>Поиск</button>
   <button data-tab="settings"><span class="ic">⚙️</span>Ещё</button>
 </nav>
+<script>
+// не оставляем экран висеть на «Загрузка…», если скрипт упал (напр. несовместимый метод WebApp в старом клиенте)
+function _showErr(m){var v=document.getElementById("view");if(v&&v.querySelector(".spin"))v.innerHTML='<div class="empty">Не удалось запустить: '+m+'<br>Обновите Telegram и попробуйте снова.</div>';}
+addEventListener("error",function(e){_showErr((e.error&&e.error.message)||e.message||"ошибка");});
+addEventListener("unhandledrejection",function(e){_showErr((e.reason&&e.reason.message)||e.reason||"ошибка");});
+</script>
 <script src="static/app.js"></script>
 </body>
 </html>

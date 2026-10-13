@@ -1,6 +1,7 @@
 "use strict";
 const tg = window.Telegram ? window.Telegram.WebApp : null;
-if (tg) { tg.ready(); tg.expand(); }
+// часть методов WebApp есть не во всех клиентах (старый Telegram Desktop) — не роняем из-за них весь скрипт
+if (tg) { try { tg.ready(); } catch (_) {} try { tg.expand(); } catch (_) {} }
 
 const INIT = tg ? tg.initData : "";
 const KIND = { lecture: "ЛЕКЦИЯ", practice: "ПРАКТИКА", lab: "ЛАБОРАТОРНАЯ" };
