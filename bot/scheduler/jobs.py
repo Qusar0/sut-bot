@@ -5,7 +5,7 @@ import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from html import escape
 
 from aiogram.types import BufferedInputFile
@@ -18,7 +18,7 @@ from bot.broadcast import RATE, Broadcaster
 from bot.config import TZ
 from bot.db.base import Session
 from bot.db.models import User
-from bot.keyboards.main import day_nav, week_nav
+from bot.keyboards.main import attendance_mark_kb, day_nav, week_nav
 from bot.render.image import render_changes_pdf
 from bot.render.text import render_day, render_diff, render_diff_short, render_reminder, render_week
 from bot.services.schedule import Diff, ScheduleService, monday_of, today
@@ -68,6 +68,8 @@ class Jobs:
         self._staff_empty = False
         self._tasks: set[asyncio.Task] = set()
         self._cold_done: str = ""  # дата последнего опроса «холодных» разделов ЛК
+        self._att_day: date | None = None  # для сброса дедупа уведомлений об отметке по дням
+        self._att_seen: set[tuple[int, str]] = set()  # (tg_id, rasp) — уже сообщили «можно отметиться»
         schedule.on_change = self.on_change
 
     async def _send(self, recipients: list[Recipient], text: str, **kwargs) -> None:
@@ -264,19 +266,61 @@ class Jobs:
     # --- автоотметка (п. 36) ---
 
     async def auto_attendance(self) -> None:
+        """Уведомление об отметке всем, у кого привязан ЛК. Плюс автоотметка — кому включена.
+
+        Как только у пользователя появляется доступная кнопка отметки:
+          • сообщаем «можно отметиться» с кнопками (отметка в боте / на сайте) — всем;
+          • если включена автоотметка — отмечаем сами и шлём результат (а при неудаче — ручную отметку).
+        Одно уведомление на пару в день (дедуп), чтобы не спамить каждую минуту.
+        """
         if self.lk is None:
             return
-        if today().weekday() == 6:
+        d = today()
+        if d.weekday() == 6:
             return
-        for tg_id in await self.lk.auto_ids():
+        if self._att_day != d:  # новый день — забываем прошлые уведомления
+            self._att_day = d
+            self._att_seen = set()
+        auto = set(await self.lk.auto_ids())
+        for tg_id in await self.lk.linked_ids():
             try:
-                marked = await self.lk.auto_mark(tg_id)
+                lessons = await self.lk.lk_schedule(tg_id)
             except Exception:
-                log.warning("автоотметка %s не удалась", tg_id)
+                log.warning("отметка %s: расписание ЛК недоступно", tg_id)
                 continue
-            for subject in marked:
-                metrics.inc("ЛК: автоотметка")
-                await self.bc.send(tg_id, f"✅ <b>Автоотметка</b>: {subject}", disable_notification=is_quiet_time())
+            for l in lessons:
+                if not (l.button_ready and not l.started):
+                    continue
+                key = (tg_id, l.rasp)
+                if key in self._att_seen:
+                    continue
+                self._att_seen.add(key)
+                await self._notify_mark(tg_id, l, tg_id in auto)
+
+    async def _notify_mark(self, tg_id: int, lesson, is_auto: bool) -> None:
+        quiet = is_quiet_time()
+        title = f"{escape(lesson.subject)} · {lesson.time}"
+        if not is_auto:  # просто сообщаем, что можно отметиться
+            await self.bc.send(
+                tg_id,
+                f"🔔 <b>Можно отметиться</b>: {title}",
+                reply_markup=attendance_mark_kb(lesson.rasp),
+                disable_notification=quiet,
+            )
+            return
+        try:  # автоотметка включена — отмечаем и шлём результат
+            await self.lk.mark_attendance(tg_id, lesson.rasp)
+        except Exception:
+            log.warning("автоотметка %s: не удалось отметить %s", tg_id, lesson.rasp)
+            await self.bc.send(
+                tg_id,
+                f"⚠️ <b>Не получилось отметиться</b>: {title}\nОтметьтесь вручную 👇",
+                reply_markup=attendance_mark_kb(lesson.rasp),
+                disable_notification=quiet,
+            )
+            return
+        metrics.inc("ЛК: автоотметка")
+        await self.bc.send(tg_id, f"✅ <b>Отметил вас на паре</b>: {title}", disable_notification=quiet)
 
     # --- запуск ---
 

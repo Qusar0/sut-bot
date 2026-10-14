@@ -5,6 +5,18 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardBu
 from bot.db.models import User
 from bot.legal import DOCUMENTS
 
+LK_SITE_URL = "https://lk.sut.ru/cabinet/?login=yes"
+
+
+def attendance_mark_kb(rasp: str) -> InlineKeyboardMarkup:
+    """Кнопки под уведомлением «можно отметиться»: отметка в боте и ссылка на сайт ЛК."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✍️ Отметиться", callback_data=f"lk:mark:{rasp}")],
+            [InlineKeyboardButton(text="🌐 Отметиться на сайте ЛК", url=LK_SITE_URL)],
+        ]
+    )
+
 
 class Btn:
     TODAY = "📅 Сегодня"
