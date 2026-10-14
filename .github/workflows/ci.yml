@@ -129,5 +129,9 @@ jobs:
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f > /dev/null
-            sleep 15
-            curl -fsS http://127.0.0.1:8080/health
+            # бот поднимает веб-сервер после загрузки справочников (через прокси) — ждём /health с ретраями
+            for i in $(seq 1 40); do
+              sleep 3
+              curl -fsS http://127.0.0.1:8080/health && exit 0
+              [ "$i" = 40 ] && { echo "health не поднялся за 120с"; docker compose logs --tail 50 bot; exit 1; }
+            done
