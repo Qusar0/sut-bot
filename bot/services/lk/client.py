@@ -79,6 +79,8 @@ class LkSession:
 
     async def login(self) -> str:
         """Входит в ЛК. Возвращает HTML главной страницы (там ФИО, роль, учебная неделя)."""
+        # перелогин — только с чистого листа: протухшие куки прошлой сессии зацикливают редирект на /cabinet/
+        self._http.cookies.clear()
         await self._request("GET", "")  # получить PHPSESSID
         answer = (
             await self._request(
