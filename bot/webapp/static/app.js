@@ -20,7 +20,8 @@ view.addEventListener("touchend", (e) => {
 }, { passive: true });
 
 async function api(path, opts = {}) {
-  const headers = { "X-Telegram-Init-Data": INIT, ...(opts.headers || {}) };
+  // initData читаем заново каждый раз: на части клиентов она появляется не сразу после загрузки
+  const headers = { "X-Telegram-Init-Data": (tg && tg.initData) || INIT, ...(opts.headers || {}) };
   if (opts.body) headers["Content-Type"] = "application/json";
   const r = await fetch(path, { ...opts, headers });
   if (r.status === 409) throw { code: "no_group" };
@@ -596,6 +597,8 @@ function handle(e) {
 }
 
 (async () => {
+  // ждём, пока Telegram отдаст initData (иногда появляется на несколько сотен мс позже загрузки)
+  for (let i = 0; i < 20 && tg && !tg.initData; i++) await new Promise((r) => setTimeout(r, 50));
   try {
     state.me = await api("/api/me");
     if (!state.me.consent) { view.innerHTML = '<div class="empty">Откройте бота командой /start и примите документы, затем вернитесь в приложение.</div>'; strip.innerHTML = ""; return; }
