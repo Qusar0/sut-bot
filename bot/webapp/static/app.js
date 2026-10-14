@@ -10,6 +10,15 @@ const view = $("view"), strip = $("strip");
 
 let state = { tab: "home", date: null, me: null };
 
+// свайп влево/вправо на экране дня = листание дней
+let _swipeX = 0;
+view.addEventListener("touchstart", (e) => { _swipeX = e.changedTouches[0].clientX; }, { passive: true });
+view.addEventListener("touchend", (e) => {
+  if (state.tab !== "day" || !state.date) return;
+  const dx = e.changedTouches[0].clientX - _swipeX;
+  if (Math.abs(dx) > 55) { state.date = shiftDay(state.date, dx < 0 ? 1 : -1); showDay(); }
+}, { passive: true });
+
 async function api(path, opts = {}) {
   const headers = { "X-Telegram-Init-Data": INIT, ...(opts.headers || {}) };
   if (opts.body) headers["Content-Type"] = "application/json";
@@ -31,6 +40,13 @@ function lessonCard(l) {
 
 function nowHM() { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); }
 function toMin(hm) { const [h, m] = hm.split(":").map(Number); return h * 60 + m; }
+// сдвиг даты на ±1 день с пропуском воскресенья (в расписании его нет), переходит и на соседнюю неделю
+function shiftDay(iso, delta) {
+  const dt = new Date(iso + "T00:00:00");
+  dt.setDate(dt.getDate() + delta);
+  if (dt.getDay() === 0) dt.setDate(dt.getDate() + (delta > 0 ? 1 : -1));
+  return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+}
 
 // показ/скрытие шапок
 function chrome({ hero = false, header = false, showStrip = false } = {}) {
@@ -85,12 +101,19 @@ async function showDay() {
     state.date = d.date;
     $("h-title").textContent = d.title;
     $("h-sub").textContent = d.week_label;
-    strip.innerHTML = '<div class="strip">' + d.strip.map((x) => {
-      const bars = (x.kinds || []).map((k) => `<i class="bar ${k}"></i>`).join("") || '<i class="bar none"></i>';
-      return `<div class="d ${x.active ? "active" : ""}" data-date="${x.date}">
-        <small>${x.weekday}</small><b>${x.day}</b><div class="bars">${bars}</div></div>`;
-    }).join("") + "</div>";
-    strip.querySelectorAll(".d").forEach((el) => el.onclick = () => { state.date = el.dataset.date; showDay(); });
+    strip.innerHTML = '<div class="strip">'
+      + '<div class="d nav" data-nav="-1">‹</div>'
+      + d.strip.map((x) => {
+        const bars = (x.kinds || []).map((k) => `<i class="bar ${k}"></i>`).join("") || '<i class="bar none"></i>';
+        return `<div class="d ${x.active ? "active" : ""}" data-date="${x.date}">
+          <small>${x.weekday}</small><b>${x.day}</b><div class="bars">${bars}</div></div>`;
+      }).join("")
+      + '<div class="d nav" data-nav="1">›</div>'
+      + "</div>";
+    strip.querySelectorAll(".d").forEach((el) => el.onclick = () => {
+      state.date = el.dataset.nav ? shiftDay(state.date, +el.dataset.nav) : el.dataset.date;
+      showDay();
+    });
     const isToday = d.date === state.me.today;
     const slots = groupSlots(d.lessons);
     view.innerHTML = slots.length ? slots.map((s) => daySlot(s, isToday)).join("") : '<div class="empty">Пар нет 🎉</div>';
