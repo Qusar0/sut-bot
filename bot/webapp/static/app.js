@@ -4,6 +4,15 @@ const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { try { tg.ready(); } catch (_) {} try { tg.expand(); } catch (_) {} }
 
 const INIT = tg ? tg.initData : "";
+
+// безопасные обёртки над методами WebApp: на старых клиентах они кидают postMessage-ошибку
+function haptic(kind, arg) { try { if (tg && tg.HapticFeedback) tg.HapticFeedback[kind](arg); } catch (_) {} }
+function askConfirm(msg) {
+  return new Promise((res) => {
+    try { if (tg && tg.showConfirm) { tg.showConfirm(msg, res); return; } } catch (_) {}
+    res(window.confirm(msg));
+  });
+}
 const KIND = { lecture: "ЛЕКЦИЯ", practice: "ПРАКТИКА", lab: "ЛАБОРАТОРНАЯ" };
 const $ = (id) => document.getElementById(id);
 const view = $("view"), strip = $("strip");
@@ -127,7 +136,7 @@ async function showHome() {
   chrome({ hero: true }); spin();
   try {
     const d = await api("/api/day");
-    const name = (tg && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || "";
+    const name = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || "";
     const slots = groupSlots(d.lessons);
     const n = nowHM();
     let cur = null, kind = "";
@@ -355,7 +364,7 @@ async function showSettings() {
   view.querySelectorAll(".sw").forEach((sw) => sw.onclick = async () => {
     const f = sw.dataset.f; s[f] = !s[f]; sw.classList.toggle("on");
     await api("/api/settings", { method: "POST", body: JSON.stringify({ [f]: s[f] }) });
-    if (tg) tg.HapticFeedback.selectionChanged();
+    haptic("selectionChanged");
   });
   $("rm").onchange = async (e) => { s.remind_minutes = +e.target.value; await api("/api/settings", { method: "POST", body: JSON.stringify({ remind_minutes: s.remind_minutes }) }); };
   $("chg").onclick = chooseGroup;
@@ -388,13 +397,13 @@ async function showLK() {
   view.querySelectorAll("[data-sec]").forEach((r) => r.onclick = () => (r.dataset.sec === "diary" ? lkDiary() : r.dataset.sec === "messages" ? lkMessages() : r.dataset.sec === "record_book" ? lkRecordBook() : lkSection(r.dataset.sec, r.textContent)));
   $("lk-att").onclick = lkAttendance;
   $("lk-unlink").onclick = async () => {
-    if (tg && !(await new Promise((res) => tg.showConfirm("Отключить кабинет и удалить его данные?", res)))) return;
+    if (!(await askConfirm("Отключить кабинет и удалить его данные?"))) return;
     await api("/api/lk/unlink", { method: "POST", body: "{}" }); showLK();
   };
   $("lk-auto").onclick = async (e) => {
     const sw = e.currentTarget, on = !sw.classList.contains("on");
-    if (on && tg && !(await new Promise((res) => tg.showConfirm(
-      "Включить автоотметку? Бот будет сам нажимать «Начать занятие». Ответственность за правила вуза о посещаемости на вас.", res)))) return;
+    if (on && !(await askConfirm(
+      "Включить автоотметку? Бот будет сам нажимать «Начать занятие». Ответственность за правила вуза о посещаемости на вас."))) return;
     sw.classList.toggle("on", on);
     await api("/api/lk/auto", { method: "POST", body: JSON.stringify({ on }) });
   };
@@ -483,11 +492,11 @@ async function lkThread(m) {
       $("send").onclick = async () => {
         const text = $("reply").value.trim();
         if (!text) return;
-        if (tg && !(await new Promise((r) => tg.showConfirm("Отправить ответ преподавателю от вашего имени?", r)))) return;
+        if (!(await askConfirm("Отправить ответ преподавателю от вашего имени?"))) return;
         $("send").textContent = "…"; $("send").disabled = true;
         try {
           await api("/api/lk/reply", { method: "POST", body: JSON.stringify({ id: m.id, text }) });
-          if (tg) tg.HapticFeedback.notificationOccurred("success");
+          haptic("notificationOccurred", "success");
           lkThread(m);
         } catch (e) { $("send").textContent = "Ошибка"; $("send").disabled = false; }
       };
@@ -548,7 +557,7 @@ async function lkAttendance() {
     view.querySelectorAll(".mk").forEach((b) => b.onclick = async () => {
       b.textContent = "…"; b.disabled = true;
       try { await api("/api/lk/mark", { method: "POST", body: JSON.stringify({ rasp: b.dataset.rasp }) });
-        if (tg) tg.HapticFeedback.notificationOccurred("success"); lkAttendance();
+        haptic("notificationOccurred", "success"); lkAttendance();
       } catch (e) { b.textContent = "Ошибка"; }
     });
   } catch (e) { view.innerHTML = '<div class="empty">Расписание ЛК недоступно.</div>'; }
@@ -576,15 +585,17 @@ async function chooseGroup() {
 // --- навигация ---
 
 function backButton(fn) {
-  if (!tg) return;
-  tg.BackButton.show();
-  tg.BackButton.onClick(function h() { tg.BackButton.offClick(h); tg.BackButton.hide(); fn(); });
+  if (!tg || !tg.BackButton) return;
+  try {
+    tg.BackButton.show();
+    tg.BackButton.onClick(function h() { try { tg.BackButton.offClick(h); tg.BackButton.hide(); } catch (_) {} fn(); });
+  } catch (_) {}
 }
 
 const TABS = { home: showHome, day: showDay, week: showWeek, subjects: showSubjects, search: showSearch, settings: showSettings };
 function switchTab(tab) {
   state.tab = tab;
-  if (tg) tg.BackButton.hide();
+  if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch (_) {} }
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   TABS[tab]();
 }
