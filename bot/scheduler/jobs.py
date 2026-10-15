@@ -260,8 +260,30 @@ class Jobs:
                 text = render_news(section, items)
                 if text:
                     await self.bc.send(tg_id, text, disable_notification=quiet_now)
+                if section == "files":  # сразу присылаем сам файл документом
+                    await self._send_new_files(tg_id, items, quiet_now)
         if cold and ids:
             self._cold_done = today_str
+
+    async def _send_new_files(self, tg_id: int, items: list, quiet: bool) -> None:
+        """Скачивает новые файлы группы сессией студента и шлёт их документом в чат."""
+        from aiogram.types import BufferedInputFile
+
+        if self.lk is None:
+            return
+        for it in items:
+            for f in it.get("files") or []:
+                name, url = (f[0], f[1]) if isinstance(f, (list, tuple)) else (f.get("name"), f.get("url"))
+                if not url:
+                    continue
+                try:
+                    data, _ctype, fname = await self.lk.download_file(tg_id, url)
+                    if len(data) <= 48 * 1024 * 1024:
+                        await self.bc.send_document(
+                            tg_id, BufferedInputFile(data, filename=fname or name or "file"), disable_notification=quiet
+                        )
+                except Exception:
+                    log.warning("файл ЛК %s не отправлен", url)
 
     # --- автоотметка (п. 36) ---
 

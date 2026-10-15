@@ -115,5 +115,25 @@ class LkSession:
         """Раздел ЛК, как его открывает left_click() в меню кабинета."""
         return await self.post(modul, {"key": str(key), **params})
 
+    async def get_bytes(self, url: str) -> tuple[bytes, str]:
+        """Качает файл из ЛК под текущей сессией. Возвращает (содержимое, content-type)."""
+        async with self._lock:
+            for _ in range(2):
+                if not self.logged_in:
+                    await self.login()
+                await _limiter.wait()
+                try:
+                    r = await self._http.get(url)
+                except httpx.HTTPError as e:
+                    raise LkUnavailable(str(e)) from e
+                ctype = r.headers.get("content-type", "application/octet-stream")
+                if "text/html" in ctype.lower() and _expired(r.content[:300].decode(ENCODING, "replace")):
+                    self.logged_in = False  # вместо файла пришла страница логина — сессия протухла
+                    continue
+                if r.status_code >= 400:
+                    raise LkUnavailable(f"HTTP {r.status_code}")
+                return r.content, ctype
+            raise LkUnavailable("файл недоступен")
+
     async def close(self) -> None:
         await self._http.aclose()

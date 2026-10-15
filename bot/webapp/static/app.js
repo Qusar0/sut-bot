@@ -41,6 +41,24 @@ async function api(path, opts = {}) {
 
 function esc(s) { return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 function spin() { view.innerHTML = '<div class="spin">Загрузка…</div>'; }
+function toast(msg) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+// файлы ЛК под авторизацией — не открыть ссылкой; просим бота прислать файл в чат документом
+async function sendLkFile(url, name) {
+  toast("Отправляю файл в чат…");
+  try {
+    await api("/api/lk/sendfile", { method: "POST", body: JSON.stringify({ url }) });
+    toast("📨 Файл отправлен в чат");
+  } catch (_) { toast("Не удалось отправить файл"); }
+}
+function wireLkFiles(box) {
+  box.querySelectorAll('a[href*="lk.sut.ru"]').forEach((a) => {
+    const url = a.href, name = a.textContent.replace(/^📎\s*/, "").trim();
+    a.onclick = (e) => { e.preventDefault(); sendLkFile(url, name); };
+  });
+}
 function lessonCard(l) {
   const meta = [l.room && "ауд. " + l.room, l.teachers].filter(Boolean).map(esc).join(" · ");
   return `<div class="card ${l.kind_key}"><div class="time">${esc(l.pair)} пара · ${l.start}–${l.end}</div>
@@ -488,6 +506,7 @@ async function lkThread(m) {
          <button class="mk" id="send">Отправить</button></div>`
       : '<div class="note">На это сообщение нельзя ответить.</div>';
     view.innerHTML = `<div class="chat">${bubbles.join("") || '<div class="note">Текст недоступен.</div>'}${files}</div>${reply}`;
+    wireLkFiles(view);
     if (t.can_reply) {
       $("send").onclick = async () => {
         const text = $("reply").value.trim();
@@ -538,6 +557,7 @@ async function lkSection(name, title) {
   try {
     const d = await api("/api/lk/section?name=" + name);
     view.innerHTML = `<div class="card" style="border:none">${d.html}</div>`;
+    wireLkFiles(view);
   } catch (e) {
     view.innerHTML = e.code === "no_group" ? "" : '<div class="empty">Раздел недоступен.</div>';
   }

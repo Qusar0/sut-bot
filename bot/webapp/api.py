@@ -111,7 +111,7 @@ async def _guard_consent(request: web.Request) -> None:
 
 
 def build_webapp(
-    app: web.Application, schedule: ScheduleService, directory: Directory, staff: StaffService, lk=None
+    app: web.Application, schedule: ScheduleService, directory: Directory, staff: StaffService, lk=None, bot=None
 ) -> None:
     app.middlewares.append(auth_middleware)
     r = app.router
@@ -598,6 +598,29 @@ def build_webapp(
             await lk.set_auto(request["tg_id"], bool(body.get("on")))
             return web.json_response({"ok": True})
 
+        async def lk_sendfile(request: web.Request) -> web.Response:
+            # файлы ЛК под авторизацией — качаем сессией студента и шлём документом в чат
+            from aiogram.types import BufferedInputFile
+
+            from bot.services.lk.client import LkError
+            from bot.services.lk.service import NotLinked
+
+            if bot is None:
+                raise web.HTTPServiceUnavailable()
+            body = await request.json()
+            url = (body.get("url") or "").strip()
+            try:
+                data, _ctype, name = await lk.download_file(request["tg_id"], url)
+            except NotLinked:
+                raise web.HTTPConflict(text="not linked") from None
+            except LkError:
+                raise web.HTTPBadGateway(text="file error") from None
+            if len(data) > 48 * 1024 * 1024:  # лимит бота Telegram — 50 МБ
+                raise web.HTTPRequestEntityTooLarge(max_size=48 * 1024 * 1024, actual_size=len(data))
+            await bot.send_document(request["tg_id"], BufferedInputFile(data, filename=name))
+            return web.json_response({"ok": True})
+
+        r.add_post("/api/lk/sendfile", lk_sendfile)
         r.add_get("/api/lk/status", lk_status)
         r.add_post("/api/lk/link", lk_link)
         r.add_post("/api/lk/unlink", lk_unlink)

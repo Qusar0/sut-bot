@@ -39,7 +39,7 @@ def build_app(feeds: CalendarFeeds, webapp: dict | None = None) -> web.Applicati
     if webapp:
         from bot.webapp.api import build_webapp
 
-        build_webapp(app, webapp["schedule"], webapp["directory"], webapp["staff"], webapp.get("lk"))
+        build_webapp(app, webapp["schedule"], webapp["directory"], webapp["staff"], webapp.get("lk"), webapp.get("bot"))
     return app
 
 

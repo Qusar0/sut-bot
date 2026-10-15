@@ -57,7 +57,8 @@ async def main() -> None:
     schedule_svc = ScheduleService(client, directory_svc)
     staff_svc = StaffService(client)
     lk_svc = LkService()
-    jobs = Jobs(schedule_svc, Broadcaster(bot), staff_svc, lk_svc)
+    bc = Broadcaster(bot)
+    jobs = Jobs(schedule_svc, bc, staff_svc, lk_svc)
     await jobs.startup()
     scheduler = jobs.install()
 
@@ -105,7 +106,7 @@ async def main() -> None:
         dp=dp if webhook else None,
         bot=bot,
         secret=secret,
-        webapp={"schedule": schedule_svc, "directory": directory_svc, "staff": staff_svc, "lk": lk_svc},
+        webapp={"schedule": schedule_svc, "directory": directory_svc, "staff": staff_svc, "lk": lk_svc, "bot": bc},
     )
     try:
         if webhook:

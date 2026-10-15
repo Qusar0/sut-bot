@@ -331,6 +331,18 @@ class LkService:
         metrics.inc("ЛК: отметка")
         return P.parse_mark_result(raw)
 
+    async def download_file(self, tg_id: int, url: str) -> tuple[bytes, str, str]:
+        """Качает файл ЛК (документ группы, вложение) под сессией студента. (байты, content-type, имя)."""
+        from urllib.parse import unquote
+
+        if not url.startswith("https://lk.sut.ru/"):
+            raise LkError("недопустимый адрес файла")
+        async with self._lock(tg_id):
+            sess = await self._session(tg_id)
+            data, ctype = await sess.get_bytes(url)
+        name = unquote(url.rsplit("/", 1)[-1].split("?")[0]) or "file"
+        return data, ctype, name
+
 
 def _new_items(section: str, old, new) -> list:
     """Что появилось в разделе по сравнению с прошлым снимком."""
