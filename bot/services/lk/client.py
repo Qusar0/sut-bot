@@ -64,18 +64,27 @@ class LkSession:
         self.logged_in = False
 
     async def _request(self, method: str, url: str, **kw) -> str:
-        await _limiter.wait()
-        t0 = time.perf_counter()
-        try:
-            r = await self._http.request(method, url, **kw)
-        except httpx.HTTPError as e:
-            metrics.inc("ЛК: ошибка сети")
-            raise LkUnavailable(str(e)) from e
-        metrics.observe("ЛК: запрос", time.perf_counter() - t0)
-        if r.status_code >= 500:
-            metrics.inc("ЛК: ошибка сервера")
-            raise LkUnavailable(f"HTTP {r.status_code}")
-        return r.content.decode(ENCODING, errors="replace")
+        last: Exception | None = None
+        for attempt in range(3):  # прокси иногда рвёт соединение — повторяем обрыв/таймаут
+            await _limiter.wait()
+            t0 = time.perf_counter()
+            try:
+                r = await self._http.request(method, url, **kw)
+            except httpx.TransportError as e:
+                last = e
+                metrics.inc("ЛК: сбой соединения")
+                await asyncio.sleep(0.6 * (attempt + 1))
+                continue
+            except httpx.HTTPError as e:
+                metrics.inc("ЛК: ошибка сети")
+                raise LkUnavailable(str(e)) from e
+            metrics.observe("ЛК: запрос", time.perf_counter() - t0)
+            if r.status_code >= 500:
+                metrics.inc("ЛК: ошибка сервера")
+                raise LkUnavailable(f"HTTP {r.status_code}")
+            return r.content.decode(ENCODING, errors="replace")
+        metrics.inc("ЛК: ошибка сети")
+        raise LkUnavailable(str(last) or "обрыв соединения") from last
 
     async def login(self) -> str:
         """Входит в ЛК. Возвращает HTML главной страницы (там ФИО, роль, учебная неделя)."""
