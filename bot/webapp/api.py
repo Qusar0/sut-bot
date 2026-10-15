@@ -129,6 +129,40 @@ def build_webapp(
                 "group": {"id": group.id, "name": group.name, "faculty": group.faculty} if group else None,
                 "settings": {f: getattr(user, f) for f in SETTINGS_FIELDS},
                 "today": today().isoformat(),
+                "is_admin": settings.admin_id is not None and tg == settings.admin_id,
+            }
+        )
+
+    async def admin_stats(request: web.Request) -> web.Response:
+        if settings.admin_id is None or request["tg_id"] != settings.admin_id:
+            raise web.HTTPForbidden(text="admin only")
+        import shutil
+        import time as _time
+
+        du = shutil.disk_usage("/")
+        c = metrics.counters
+        lk_counts = {}
+        if lk is not None:
+            try:
+                lk_counts = {"linked": len(await lk.linked_ids()), "auto": len(await lk.auto_ids())}
+            except Exception:
+                lk_counts = {}
+        return web.json_response(
+            {
+                "uptime_sec": int(_time.time() - metrics.started_at),
+                "disk": {"free": du.free, "total": du.total, "used": du.used},
+                "att": {
+                    "available": c.get("автоотметка: доступна", 0),
+                    "marked": c.get("автоотметка: отмечено", 0),
+                    "failed": c.get("автоотметка: ошибка", 0),
+                    "lk_down": c.get("автоотметка: ЛК недоступен", 0),
+                },
+                "lk": lk_counts,
+                "counters": dict(c),
+                "timings": [
+                    {"name": n, "calls": tot, "p50": round(p50), "p95": round(p95), "max": round(mx)}
+                    for n, tot, p50, p95, mx in metrics.snapshot()
+                ],
             }
         )
 
@@ -637,6 +671,7 @@ def build_webapp(
     r.add_get("/", index)
     r.add_get("/app", index)
     r.add_get("/api/me", me)
+    r.add_get("/api/admin/stats", admin_stats)
     r.add_post("/api/settings", set_settings)
     r.add_post("/api/group", set_group)
     r.add_get("/api/groups", groups)

@@ -309,6 +309,7 @@ class Jobs:
                 lessons = await self.lk.lk_schedule(tg_id)
             except Exception:
                 log.warning("отметка %s: расписание ЛК недоступно", tg_id)
+                metrics.inc("автоотметка: ЛК недоступен")
                 continue
             for l in lessons:
                 if not (l.button_ready and not l.started):
@@ -322,6 +323,7 @@ class Jobs:
     async def _notify_mark(self, tg_id: int, lesson, is_auto: bool) -> None:
         quiet = is_quiet_time()
         title = f"{escape(lesson.subject)} · {lesson.time}"
+        metrics.inc("автоотметка: доступна")
         if not is_auto:  # просто сообщаем, что можно отметиться
             await self.bc.send(
                 tg_id,
@@ -334,6 +336,7 @@ class Jobs:
             await self.lk.mark_attendance(tg_id, lesson.rasp)
         except Exception:
             log.warning("автоотметка %s: не удалось отметить %s", tg_id, lesson.rasp)
+            metrics.inc("автоотметка: ошибка")
             await self.bc.send(
                 tg_id,
                 f"⚠️ <b>Не получилось отметиться</b>: {title}\nОтметьтесь вручную 👇",
@@ -341,7 +344,7 @@ class Jobs:
                 disable_notification=quiet,
             )
             return
-        metrics.inc("ЛК: автоотметка")
+        metrics.inc("автоотметка: отмечено")
         await self.bc.send(tg_id, f"✅ <b>Отметил вас на паре</b>: {title}", disable_notification=quiet)
 
     # --- запуск ---

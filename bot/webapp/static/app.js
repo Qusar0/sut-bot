@@ -612,7 +612,45 @@ function backButton(fn) {
   } catch (_) {}
 }
 
-const TABS = { home: showHome, day: showDay, week: showWeek, subjects: showSubjects, search: showSearch, settings: showSettings };
+// --- статистика (только админу) ---
+async function showStats() {
+  chrome({ header: true }); spin();
+  $("h-title").textContent = "Статистика"; $("h-sub").textContent = "мониторинг";
+  let s;
+  try { s = await api("/api/admin/stats"); } catch (e) { return handle(e); }
+  const gb = (b) => (b / 1e9).toFixed(1);
+  const upt = (sec) => { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return h ? `${h} ч ${m} м` : `${m} м`; };
+  const a = s.att, diskPct = Math.round(s.disk.used / s.disk.total * 100);
+  const okRate = (a.marked + a.failed) ? Math.round(100 * a.marked / (a.marked + a.failed)) : 100;
+  const tile = (label, val, cls) => `<div class="stat ${cls || ""}"><div class="sv">${val}</div><div class="sl">${label}</div></div>`;
+  const dbad = diskPct > 88, dcol = dbad ? "var(--lab)" : "var(--brand)";
+  const rows = (s.timings || []).filter((t) => t.calls).sort((x, y) => y.p95 - x.p95).slice(0, 8)
+    .map((t) => `<div class="rb-item"><span>${esc(t.name)}</span><span class="rowprog">${t.p95} мс · ${t.calls}</span></div>`).join("");
+  view.innerHTML =
+    `<div class="block">✅ Автоотметка</div>
+     <div class="stats4">
+       ${tile("доступно пар", a.available)}
+       ${tile("отмечено", a.marked, "g")}
+       ${tile("ошибок", a.failed, a.failed ? "r" : "")}
+       ${tile("ЛК недоступен", a.lk_down, a.lk_down ? "r" : "")}
+     </div>
+     <div class="note">Успешность автоотметки: <b>${okRate}%</b> · обновлено только что</div>
+     <div class="block">🖥 Сервер</div>
+     <div class="big"><div style="flex:1"><b>Диск</b><div class="hint">${gb(s.disk.free)} ГБ свободно из ${gb(s.disk.total)}</div>
+       <div class="pbar"><i style="width:${diskPct}%;background:${dcol}"></i></div></div>
+       <div class="ic" style="background:${dcol};font-size:15px">${diskPct}%</div></div>
+     <div class="stats4">
+       ${tile("аптайм", upt(s.uptime_sec))}
+       ${tile("ЛК привязан", (s.lk && s.lk.linked) || 0)}
+       ${tile("автоотметка вкл", (s.lk && s.lk.auto) || 0)}
+     </div>
+     <div class="block">⏱ Операции (p95)</div>
+     <div class="rb-sem" style="padding:6px 14px">${rows || '<div class="note">пока нет данных</div>'}</div>
+     <div class="seg"><button id="st-refresh">↻ Обновить</button></div>`;
+  $("st-refresh").onclick = showStats;
+}
+
+const TABS = { home: showHome, day: showDay, week: showWeek, subjects: showSubjects, search: showSearch, settings: showSettings, stats: showStats };
 function switchTab(tab) {
   state.tab = tab;
   if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch (_) {} }
@@ -633,6 +671,7 @@ function handle(e) {
   try {
     state.me = await api("/api/me");
     if (!state.me.consent) { view.innerHTML = '<div class="empty">Откройте бота командой /start и примите документы, затем вернитесь в приложение.</div>'; strip.innerHTML = ""; return; }
+    if (state.me.is_admin) { const b = $("nav-stats"); if (b) b.style.display = ""; }
     if (!state.me.group) { chooseGroup(); return; }
     switchTab("home");
   } catch (e) { handle(e); }

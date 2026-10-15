@@ -129,6 +129,12 @@ button.mk{background:var(--brand);color:#fff;border:none;border-radius:10px;padd
 .rb-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06);font-size:14px}
 .spin{text-align:center;color:var(--hint);padding:50px 0}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);max-width:88%;background:var(--card);color:var(--text);padding:10px 16px;border-radius:12px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:30;text-align:center}
+.stats4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:10px 0}
+.stat{background:var(--card);border-radius:14px;padding:14px;text-align:center}
+.stat .sv{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .sl{font-size:12px;color:var(--hint);margin-top:3px}
+.stat.g .sv{color:var(--practice)}
+.stat.r .sv{color:var(--lab)}
 
 nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:600px;display:flex;background:var(--bg);border-top:1px solid var(--sec);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:none;background:none;color:var(--hint);padding:9px 0;font-size:11px;cursor:pointer}
@@ -147,6 +153,7 @@ nav button .ic{font-size:21px;display:block;margin-bottom:1px}
   <button data-tab="subjects"><span class="ic">📚</span>Предметы</button>
   <button data-tab="search"><span class="ic">🔎</span>Поиск</button>
   <button data-tab="settings"><span class="ic">⚙️</span>Ещё</button>
+  <button data-tab="stats" id="nav-stats" style="display:none"><span class="ic">📊</span>Стата</button>
 </nav>
 <script>
 // не оставляем экран висеть на «Загрузка…», если скрипт упал (напр. несовместимый метод WebApp в старом клиенте)
