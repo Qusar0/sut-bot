@@ -191,10 +191,14 @@ def split_messages(header: str, blocks: list[str], sep: str = "\n") -> list[str]
 
 
 def _change_detail(old: Lesson, new: Lesson) -> str:
-    """Что именно поменялось в паре (преподаватель/аудитория/вид)."""
+    """Что именно поменялось в паре — только изменившееся (препод./аудитория/вид)."""
     parts = []
     if old.teachers_short != new.teachers_short:
-        parts.append(f"препод.: {old.teachers_short or '—'} → {new.teachers_short or '—'}")
+        o = [t.strip() for t in old.teachers_short.split(";") if t.strip()]
+        n = [t.strip() for t in new.teachers_short.split(";") if t.strip()]
+        gone, came = [t for t in o if t not in n], [t for t in n if t not in o]
+        if gone or came:
+            parts.append(f"препод.: {', '.join(gone) or '—'} → {', '.join(came) or '—'}")
     if old.room != new.room:
         parts.append(f"ауд.: {old.room or '—'} → {new.room or '—'}")
     if old.kind != new.kind:

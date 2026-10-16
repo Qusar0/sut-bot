@@ -218,10 +218,19 @@ def _change_row_height(l: Lesson) -> int:
     return INNER + len(title) * _h(font(16, True)) + meta * _h(font(13)) + INNER
 
 
+def _teacher_diff(o_short: str, n_short: str) -> str:
+    """Только изменившиеся преподаватели: кто ушёл → кто пришёл (а не оба полных списка)."""
+    o = [t.strip() for t in o_short.split(";") if t.strip()]
+    n = [t.strip() for t in n_short.split(";") if t.strip()]
+    gone = [t for t in o if t not in n]
+    came = [t for t in n if t not in o]
+    return f"препод.: {', '.join(gone) or '—'} → {', '.join(came) or '—'}" if (gone or came) else ""
+
+
 def _chg_meta(o: Lesson, n: Lesson) -> str:
     """Что поменялось в паре — для подписи в карточке «изменено»."""
-    if o.teachers_short != n.teachers_short:
-        return f"препод.: {o.teachers_short or '—'} → {n.teachers_short or '—'}"
+    if o.teachers_short != n.teachers_short and (td := _teacher_diff(o.teachers_short, n.teachers_short)):
+        return td
     if o.room != n.room:
         return f"ауд.: {o.room or '—'} → {n.room or '—'}"
     if o.kind != n.kind:
