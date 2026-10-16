@@ -25,7 +25,7 @@ view.addEventListener("touchstart", (e) => { _swipeX = e.changedTouches[0].clien
 view.addEventListener("touchend", (e) => {
   if (state.tab !== "day" || !state.date) return;
   const dx = e.changedTouches[0].clientX - _swipeX;
-  if (Math.abs(dx) > 55) { state.date = shiftDay(state.date, dx < 0 ? 1 : -1); showDay(); }
+  if (Math.abs(dx) > 55) { state.date = shiftDay(state.date, dx < 0 ? 7 : -7); showDay(); }  // свайп = ±неделя
 }, { passive: true });
 
 async function api(path, opts = {}) {
@@ -139,7 +139,7 @@ async function showDay() {
       + '<div class="d nav" data-nav="1">›</div>'
       + "</div>";
     strip.querySelectorAll(".d").forEach((el) => el.onclick = () => {
-      state.date = el.dataset.nav ? shiftDay(state.date, +el.dataset.nav) : el.dataset.date;
+      state.date = el.dataset.nav ? shiftDay(state.date, +el.dataset.nav * 7) : el.dataset.date;  // стрелки = ±неделя
       showDay();
     });
     const isToday = d.date === state.me.today;
