@@ -53,9 +53,10 @@ def test_diff():
     moved = replace(old[0], room="999")
     new = [moved] + old[1:]
     d = diff_lessons(56882, WEEK.monday, old, new)
-    assert d and d.added == [moved] and d.removed == [old[0]]
+    # та же пара+предмет, сменилась аудитория -> это «изменено», а не ±
+    assert d and d.changed == [(old[0], moved)] and not d.added and not d.removed
     text = render_diff("ИСТ-2633", d)
-    assert "➕" in text and "➖" in text and "999" in text
+    assert "✏️" in text and "999" in text
     assert diff_lessons(56882, WEEK.monday, old, list(old)) is None
 
 
@@ -75,4 +76,4 @@ def test_diff_real_change_still_reported():
     old = WEEK.lessons
     moved = replace(old[0], room="999", teachers_short="Иванов И.И.", teachers=("Иванов Иван Иванович",))
     d = diff_lessons(56882, WEEK.monday, old, [moved] + old[1:])
-    assert d and d.added == [moved] and d.removed == [old[0]]
+    assert d and d.changed == [(old[0], moved)]

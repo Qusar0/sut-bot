@@ -221,12 +221,12 @@ class Jobs:
         if not users:
             return
         try:
-            pdf = await asyncio.to_thread(render_changes_pdf, group.name, diff.added, diff.removed)
+            pdf = await asyncio.to_thread(render_changes_pdf, group.name, diff.added, diff.removed, diff.changed)
         except Exception:
             log.exception("PDF изменений")
             await self._send(users, render_diff(group.name, diff))
             return
-        n = len(diff.added) + len(diff.removed)
+        n = len(diff.added) + len(diff.removed) + len(diff.changed)
         caption = f"🔔 <b>Изменения в расписании {escape(group.name)}</b> · {n} изм.\n\n" + render_diff_short(diff)
         name = f"Изменения-{group.name}-{datetime.now(TZ):%d-%m-%H-%M}.pdf"
         quiet_now = is_quiet_time()

@@ -190,10 +190,25 @@ def split_messages(header: str, blocks: list[str], sep: str = "\n") -> list[str]
 # --- изменения ---
 
 
+def _change_detail(old: Lesson, new: Lesson) -> str:
+    """Что именно поменялось в паре (преподаватель/аудитория/вид)."""
+    parts = []
+    if old.teachers_short != new.teachers_short:
+        parts.append(f"препод.: {old.teachers_short or '—'} → {new.teachers_short or '—'}")
+    if old.room != new.room:
+        parts.append(f"ауд.: {old.room or '—'} → {new.room or '—'}")
+    if old.kind != new.kind:
+        parts.append(f"{old.kind} → {new.kind}")
+    return escape("; ".join(parts)) if parts else _details(new)
+
+
 def render_diff(group_name: str, diff: Diff) -> str:
     out = [f"<b>🔔 Изменения в расписании</b> · {escape(group_name)}"]
     for d in diff.days:
         lines = [f"<b>{day_title(d)}</b>"]
+        for o, n in diff.changed:
+            if n.day == d:
+                lines.append(f"✏️ {n.start} {escape(n.subject)} <i>{_change_detail(o, n)}</i>")
         for l in diff.removed:
             if l.day == d:
                 lines.append(f"➖ <s>{l.start} {escape(l.subject)}</s> <i>{_details(l)}</i>")
@@ -233,7 +248,12 @@ def render_diff_short(diff: Diff, limit: int = 900) -> str:
     for d in diff.days:
         rem = [l for l in diff.removed if l.day == d]
         add = [l for l in diff.added if l.day == d]
-        parts = [f"➖ {l.start} {escape(l.subject)}" for l in rem] + [f"➕ {l.start} {escape(l.subject)}" for l in add]
+        chg = [n for o, n in diff.changed if n.day == d]
+        parts = (
+            [f"✏️ {n.start} {escape(n.subject)}" for n in chg]
+            + [f"➖ {l.start} {escape(l.subject)}" for l in rem]
+            + [f"➕ {l.start} {escape(l.subject)}" for l in add]
+        )
         lines.append(f"<b>{WEEKDAYS_SHORT[d.weekday()]} {d:%d.%m}</b>: " + "; ".join(parts))
     text = "\n".join(lines)
     return text if len(text) <= limit else text[: limit - 1] + "…"

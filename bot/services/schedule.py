@@ -9,7 +9,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -42,10 +42,11 @@ class Diff:
     monday: date
     added: list[Lesson]
     removed: list[Lesson]
+    changed: list[tuple[Lesson, Lesson]] = field(default_factory=list)  # (было, стало) — та же пара+предмет
 
     @property
     def days(self) -> list[date]:
-        return sorted({l.day for l in self.added + self.removed})
+        return sorted({l.day for l in self.added + self.removed} | {n.day for _, n in self.changed})
 
 
 def _digest(lessons: list[Lesson]) -> str:
@@ -76,16 +77,44 @@ def _cancel_noop(added: list[Lesson], removed: list[Lesson]) -> tuple[list[Lesso
     return kept_added, kept_removed
 
 
+def _pair_changes(
+    added: list[Lesson], removed: list[Lesson]
+) -> tuple[list[Lesson], list[Lesson], list[tuple[Lesson, Lesson]]]:
+    """Пары с одинаковыми днём+парой+предметом (сменился препод/аудитория) — это изменение, а не ±."""
+    from collections import defaultdict
+
+    def slot(l: Lesson):
+        return (l.day, l.pair, l.subject)
+
+    rem_by: dict = defaultdict(list)
+    for l in removed:
+        rem_by[slot(l)].append(l)
+    add_only, changed = [], []
+    for l in added:
+        bucket = rem_by.get(slot(l))
+        if bucket:
+            changed.append((bucket.pop(0), l))  # (было, стало)
+        else:
+            add_only.append(l)
+    rem_only = [l for bucket in rem_by.values() for l in bucket]
+    return add_only, rem_only, changed
+
+
 def diff_lessons(group_id: int, monday: date, old: list[Lesson], new: list[Lesson]) -> Diff | None:
     old_k = {l.key(): l for l in old}
     new_k = {l.key(): l for l in new}
     added = [new_k[k] for k in new_k.keys() - old_k.keys()]
     removed = [old_k[k] for k in old_k.keys() - new_k.keys()]
     added, removed = _cancel_noop(added, removed)
-    if not added and not removed:
+    added, removed, changed = _pair_changes(added, removed)
+    if not added and not removed and not changed:
         return None
     return Diff(
-        group_id, monday, sorted(added, key=lambda l: (l.day, l.start)), sorted(removed, key=lambda l: (l.day, l.start))
+        group_id,
+        monday,
+        sorted(added, key=lambda l: (l.day, l.start)),
+        sorted(removed, key=lambda l: (l.day, l.start)),
+        sorted(changed, key=lambda p: (p[1].day, p[1].start)),
     )
 
 

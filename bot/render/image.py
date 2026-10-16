@@ -209,6 +209,7 @@ def lesson_counters(semester_lessons: list[Lesson]) -> Counter:
 
 ADDED = ((31, 157, 85), (231, 246, 236))
 REMOVED = ((229, 72, 77), (253, 236, 236))
+CHANGED = ((214, 120, 20), (254, 243, 230))  # оранжевый = изменено
 
 
 def _change_row_height(l: Lesson) -> int:
@@ -217,49 +218,69 @@ def _change_row_height(l: Lesson) -> int:
     return INNER + len(title) * _h(font(16, True)) + meta * _h(font(13)) + INNER
 
 
-def render_changes(group_name: str, added: list[Lesson], removed: list[Lesson]) -> Image.Image:
-    days = sorted({l.day for l in added + removed})
-    rows: list[tuple[str, Lesson | None]] = []  # ("day"|"add"|"del", занятие)
-    for d in days:
-        rows.append(("day", Lesson(d, "", "", "", "", "", "", "", (), "")))
-        rows += [("del", l) for l in sorted(removed, key=lambda x: x.start) if l.day == d]
-        rows += [("add", l) for l in sorted(added, key=lambda x: x.start) if l.day == d]
+def _chg_meta(o: Lesson, n: Lesson) -> str:
+    """Что поменялось в паре — для подписи в карточке «изменено»."""
+    if o.teachers_short != n.teachers_short:
+        return f"препод.: {o.teachers_short or '—'} → {n.teachers_short or '—'}"
+    if o.room != n.room:
+        return f"ауд.: {o.room or '—'} → {n.room or '—'}"
+    if o.kind != n.kind:
+        return f"{kind_short(o.kind)} → {kind_short(n.kind)}"
+    return n.teachers_short
+
+
+def render_changes(
+    group_name: str, added: list[Lesson], removed: list[Lesson], changed: list[tuple[Lesson, Lesson]] = ()
+) -> Image.Image:
+    changed = list(changed)
+    days = sorted({l.day for l in added + removed} | {n.day for _, n in changed})
+    rows: list[tuple[str, object]] = []  # ("day", Lesson) | ("add"/"del", Lesson) | ("chg", (old, new))
+    for day in days:
+        rows.append(("day", Lesson(day, "", "", "", "", "", "", "", (), "")))
+        rows += [("chg", p) for p in sorted(changed, key=lambda p: p[1].start) if p[1].day == day]
+        rows += [("del", l) for l in sorted(removed, key=lambda x: x.start) if l.day == day]
+        rows += [("add", l) for l in sorted(added, key=lambda x: x.start) if l.day == day]
+
+    def row_lesson(kind, item):
+        return item[1] if kind == "chg" else item
 
     header_h = PAD + _h(font(26, True)) + 6 * S + _h(font(15)) + 18 * S
     body = 0
-    for kind, l in rows:
-        body += (_h(font(18, True)) + 14 * S) if kind == "day" else (_change_row_height(l) + GAP)
+    for kind, item in rows:
+        body += (_h(font(18, True)) + 14 * S) if kind == "day" else (_change_row_height(row_lesson(kind, item)) + GAP)
     img = Image.new("RGB", (W, header_h + body + PAD), BG)
     d = ImageDraw.Draw(img)
 
     y = PAD
     d.text((PAD, y), "Изменения в расписании", font=font(26, True), fill=INK)
     y += _h(font(26, True)) + 6 * S
-    d.text((PAD, y), f"{group_name} · {len(added) + len(removed)} изм.", font=font(15), fill=MUTED)
+    d.text((PAD, y), f"{group_name} · {len(added) + len(removed) + len(changed)} изм.", font=font(15), fill=MUTED)
     y += _h(font(15)) + 10 * S
     d.line((PAD, y, W - PAD, y), fill=LINE, width=2 * S)
     y += 8 * S
 
-    for kind, l in rows:
+    for kind, item in rows:
         if kind == "day":
+            dl = item
             y += 6 * S
             d.text(
                 (PAD, y),
-                f"{WEEKDAYS[l.day.weekday()]}, {l.day.day} {MONTHS_GEN[l.day.month - 1]}",
+                f"{WEEKDAYS[dl.day.weekday()]}, {dl.day.day} {MONTHS_GEN[dl.day.month - 1]}",
                 font=font(18, True),
                 fill=INK,
             )
             y += _h(font(18, True)) + 8 * S
             continue
-        main, tint = ADDED if kind == "add" else REMOVED
+        if kind == "chg":
+            old, l = item
+            main, tint, label = CHANGED[0], CHANGED[1], "изменено"
+        else:
+            l = item
+            main, tint = ADDED if kind == "add" else REMOVED
+            label = "добавлено" if kind == "add" else "отменено"
         h = _change_row_height(l)
         d.text((PAD, y + INNER), l.start, font=font(15, True), fill=INK)
-        d.text(
-            (PAD, y + INNER + _h(font(15, True))),
-            "добавлено" if kind == "add" else "отменено",
-            font=font(12, True),
-            fill=main,
-        )
+        d.text((PAD, y + INNER + _h(font(15, True))), label, font=font(12, True), fill=main)
         d.rounded_rectangle((CARD_X, y, CARD_X + CARD_W, y + h), radius=12 * S, fill=tint)
         d.rounded_rectangle((CARD_X, y, CARD_X + 5 * S, y + h), radius=3 * S, fill=main)
         ty = y + INNER
@@ -270,16 +291,21 @@ def render_changes(group_name: str, added: list[Lesson], removed: list[Lesson]) 
                 mid = ty + int(font(16, True).getmetrics()[0] * 0.62)
                 d.line((CARD_X + INNER, mid, CARD_X + INNER + w, mid), fill=main, width=2 * S)
             ty += _h(font(16, True))
-        meta = " · ".join(
-            p for p in (f"{kind_short(l.kind)}", f"ауд. {room_short(l)}" if l.room else "", l.teachers_short) if p
-        )
+        if kind == "chg":
+            meta = _chg_meta(old, l)
+        else:
+            meta = " · ".join(
+                p for p in (f"{kind_short(l.kind)}", f"ауд. {room_short(l)}" if l.room else "", l.teachers_short) if p
+            )
         meta_lines = _wrap(meta, font(13), CARD_W - 2 * INNER, max_lines=1)  # ужимаем по ширине, не по символам
         d.text((CARD_X + INNER, ty), meta_lines[0] if meta_lines else "", font=font(13), fill=MUTED)
         y += h + GAP
     return img
 
 
-def render_changes_pdf(group_name: str, added: list[Lesson], removed: list[Lesson]) -> bytes:
+def render_changes_pdf(
+    group_name: str, added: list[Lesson], removed: list[Lesson], changed: list[tuple[Lesson, Lesson]] = ()
+) -> bytes:
     buf = io.BytesIO()
-    render_changes(group_name, added, removed).save(buf, format="PDF", resolution=144)
+    render_changes(group_name, added, removed, changed).save(buf, format="PDF", resolution=144)
     return buf.getvalue()
