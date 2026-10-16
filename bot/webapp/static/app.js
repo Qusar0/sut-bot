@@ -624,7 +624,10 @@ async function showStats() {
   const okRate = (a.marked + a.failed) ? Math.round(100 * a.marked / (a.marked + a.failed)) : 100;
   const sec = a.last_scan ? Math.max(0, Math.round(Date.now() / 1000 - a.last_scan)) : null;
   const ago = sec === null ? "—" : sec < 60 ? "только что" : sec < 3600 ? Math.round(sec / 60) + " мин назад" : Math.round(sec / 3600) + " ч назад";
-  const live = a.scans ? (sec !== null && sec < 150 ? "🟢 сканирует" : "🟡 не в период (8:30–18:30)") : "⚪ ещё не сканировал";
+  const _now = new Date(), mskMin = ((_now.getUTCHours() * 60 + _now.getUTCMinutes()) + 180) % 1440;
+  const inWindow = mskMin >= 510 && mskMin <= 1110;  // 8:30–18:30 МСК
+  const live = (sec !== null && sec < 150) ? "🟢 сканирует"
+    : (inWindow ? "🟡 тихо (должна сканировать)" : "⚪ вне периода 8:30–18:30");
   const tile = (label, val, cls) => `<div class="stat ${cls || ""}"><div class="sv">${val}</div><div class="sl">${label}</div></div>`;
   const dbad = diskPct > 88, dcol = dbad ? "var(--lab)" : "var(--brand)";
   const rows = (s.timings || []).filter((t) => t.calls).sort((x, y) => y.p95 - x.p95).slice(0, 8)
