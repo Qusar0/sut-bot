@@ -116,8 +116,12 @@ def build_webapp(
     app.middlewares.append(auth_middleware)
     r = app.router
 
-    async def index(_: web.Request) -> web.FileResponse:
-        return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+    async def index(_: web.Request) -> web.Response:
+        # подставляем версию app.js (по времени файла), чтобы Telegram-webview не держал старый кэш
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        ver = int((STATIC / "app.js").stat().st_mtime)
+        html = html.replace("static/app.js", f"static/app.js?v={ver}")
+        return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-cache"})
 
     async def me(request: web.Request) -> web.Response:
         tg = request["tg_id"]
