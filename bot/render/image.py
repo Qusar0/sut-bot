@@ -273,7 +273,8 @@ def render_changes(group_name: str, added: list[Lesson], removed: list[Lesson]) 
         meta = " · ".join(
             p for p in (f"{kind_short(l.kind)}", f"ауд. {room_short(l)}" if l.room else "", l.teachers_short) if p
         )
-        d.text((CARD_X + INNER, ty), meta[:80], font=font(13), fill=MUTED)
+        meta_lines = _wrap(meta, font(13), CARD_W - 2 * INNER, max_lines=1)  # ужимаем по ширине, не по символам
+        d.text((CARD_X + INNER, ty), meta_lines[0] if meta_lines else "", font=font(13), fill=MUTED)
         y += h + GAP
     return img
 
