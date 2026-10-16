@@ -622,19 +622,22 @@ async function showStats() {
   const upt = (sec) => { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return h ? `${h} ч ${m} м` : `${m} м`; };
   const a = s.att, diskPct = Math.round(s.disk.used / s.disk.total * 100);
   const okRate = (a.marked + a.failed) ? Math.round(100 * a.marked / (a.marked + a.failed)) : 100;
+  const sec = a.last_scan ? Math.max(0, Math.round(Date.now() / 1000 - a.last_scan)) : null;
+  const ago = sec === null ? "—" : sec < 60 ? "только что" : sec < 3600 ? Math.round(sec / 60) + " мин назад" : Math.round(sec / 3600) + " ч назад";
+  const live = a.scans ? (sec !== null && sec < 150 ? "🟢 сканирует" : "🟡 не в период (8:30–18:30)") : "⚪ ещё не сканировал";
   const tile = (label, val, cls) => `<div class="stat ${cls || ""}"><div class="sv">${val}</div><div class="sl">${label}</div></div>`;
   const dbad = diskPct > 88, dcol = dbad ? "var(--lab)" : "var(--brand)";
   const rows = (s.timings || []).filter((t) => t.calls).sort((x, y) => y.p95 - x.p95).slice(0, 8)
     .map((t) => `<div class="rb-item"><span>${esc(t.name)}</span><span class="rowprog">${t.p95} мс · ${t.calls}</span></div>`).join("");
   view.innerHTML =
-    `<div class="block">✅ Автоотметка</div>
+    `<div class="block">✅ Автоотметка · ${live}</div>
      <div class="stats4">
+       ${tile("сканирований", a.scans)}
        ${tile("доступно пар", a.available)}
        ${tile("отмечено", a.marked, "g")}
        ${tile("ошибок", a.failed, a.failed ? "r" : "")}
-       ${tile("ЛК недоступен", a.lk_down, a.lk_down ? "r" : "")}
      </div>
-     <div class="note">Успешность автоотметки: <b>${okRate}%</b> · обновлено только что</div>
+     <div class="note">Последний скан: <b>${ago}</b> · ЛК недоступен: <b>${a.lk_down}</b> · успешность: <b>${okRate}%</b></div>
      <div class="block">🖥 Сервер</div>
      <div class="big"><div style="flex:1"><b>Диск</b><div class="hint">${gb(s.disk.free)} ГБ свободно из ${gb(s.disk.total)}</div>
        <div class="pbar"><i style="width:${diskPct}%;background:${dcol}"></i></div></div>

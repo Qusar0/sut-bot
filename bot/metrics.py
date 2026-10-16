@@ -10,6 +10,7 @@ started_at = time.time()
 durations: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=_WINDOW))
 totals: Counter[str] = Counter()
 counters: Counter[str] = Counter()
+events: dict[str, float] = {}  # имя -> время последнего события (unix), для «последний скан N мин назад»
 
 
 def observe(name: str, seconds: float) -> None:
@@ -19,6 +20,11 @@ def observe(name: str, seconds: float) -> None:
 
 def inc(name: str, n: int = 1) -> None:
     counters[name] += n
+
+
+def mark(name: str) -> None:
+    """Отметить момент последнего события (используется в мониторинге)."""
+    events[name] = time.time()
 
 
 @contextmanager

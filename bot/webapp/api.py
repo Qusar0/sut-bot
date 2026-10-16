@@ -152,6 +152,8 @@ def build_webapp(
                 "uptime_sec": int(_time.time() - metrics.started_at),
                 "disk": {"free": du.free, "total": du.total, "used": du.used},
                 "att": {
+                    "scans": c.get("автоотметка: проверок", 0),
+                    "last_scan": metrics.events.get("автоотметка: проверок"),
                     "available": c.get("автоотметка: доступна", 0),
                     "marked": c.get("автоотметка: отмечено", 0),
                     "failed": c.get("автоотметка: ошибка", 0),

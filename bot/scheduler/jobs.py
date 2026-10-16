@@ -301,6 +301,8 @@ class Jobs:
         mins = now.hour * 60 + now.minute
         if now.weekday() == 6 or not (8 * 60 + 30 <= mins <= 18 * 60 + 30):  # вс или вне 8:30–18:30 МСК
             return
+        metrics.inc("автоотметка: проверок")
+        metrics.mark("автоотметка: проверок")
         d = now.date()
         if self._att_day != d:  # новый день — забываем прошлые уведомления
             self._att_day = d
