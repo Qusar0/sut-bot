@@ -297,9 +297,11 @@ class Jobs:
         """
         if self.lk is None:
             return
-        d = today()
-        if d.weekday() == 6:
+        now = datetime.now(TZ)
+        mins = now.hour * 60 + now.minute
+        if now.weekday() == 6 or not (8 * 60 + 30 <= mins <= 18 * 60 + 30):  # вс или вне 8:30–18:30 МСК
             return
+        d = now.date()
         if self._att_day != d:  # новый день — забываем прошлые уведомления
             self._att_day = d
             self._att_seen = set()
@@ -400,7 +402,7 @@ class Jobs:
             # автоотметка: кнопка живёт ~10 мин — проверяем каждую минуту, чтобы отметить сразу
             sch.add_job(
                 timed("автоотметка", self.auto_attendance),
-                cron(hour="8-20", minute="*"),
+                cron(hour="8-18", minute="*"),  # точный период 8:30–18:30 МСК проверяется внутри задачи
                 **{**opts, "misfire_grace_time": 50},
             )
         sch.start()
