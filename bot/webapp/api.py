@@ -143,6 +143,8 @@ def build_webapp(
         import shutil
         import time as _time
 
+        from bot.services.stats import attendance_stats
+
         du = shutil.disk_usage("/")
         c = metrics.counters
         lk_counts = {}
@@ -151,18 +153,13 @@ def build_webapp(
                 lk_counts = {"linked": len(await lk.linked_ids()), "auto": len(await lk.auto_ids())}
             except Exception:
                 lk_counts = {}
+        st = await attendance_stats(today())  # персистентная статистика (переживает перезапуск)
         return web.json_response(
             {
                 "uptime_sec": int(_time.time() - metrics.started_at),
                 "disk": {"free": du.free, "total": du.total, "used": du.used},
-                "att": {
-                    "scans": c.get("автоотметка: проверок", 0),
-                    "last_scan": metrics.events.get("автоотметка: проверок"),
-                    "available": c.get("автоотметка: доступна", 0),
-                    "marked": c.get("автоотметка: отмечено", 0),
-                    "failed": c.get("автоотметка: ошибка", 0),
-                    "lk_down": c.get("автоотметка: ЛК недоступен", 0),
-                },
+                "att": st["today"],
+                "att_history": st["history"],
                 "lk": lk_counts,
                 "counters": dict(c),
                 "timings": [

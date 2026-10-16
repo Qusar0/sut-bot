@@ -632,6 +632,10 @@ async function showStats() {
   const dbad = diskPct > 88, dcol = dbad ? "var(--lab)" : "var(--brand)";
   const rows = (s.timings || []).filter((t) => t.calls).sort((x, y) => y.p95 - x.p95).slice(0, 8)
     .map((t) => `<div class="rb-item"><span>${esc(t.name)}</span><span class="rowprog">${t.p95} мс · ${t.calls}</span></div>`).join("");
+  const hist = (s.att_history || []).map((h) => {
+    const dd = h.day.slice(8) + "." + h.day.slice(5, 7);
+    return `<div class="rb-item"><span>${dd}</span><span class="rowprog">скан ${h.scans} · ✅ ${h.marked} · ⚠️ ${h.failed} · ЛК✗ ${h.lk_down}</span></div>`;
+  }).join("");
   view.innerHTML =
     `<div class="block">✅ Автоотметка · ${live}</div>
      <div class="stats4">
@@ -641,6 +645,8 @@ async function showStats() {
        ${tile("ошибок", a.failed, a.failed ? "r" : "")}
      </div>
      <div class="note">Последний скан: <b>${ago}</b> · ЛК недоступен: <b>${a.lk_down}</b> · успешность: <b>${okRate}%</b></div>
+     <div class="block">📅 История автоотметки</div>
+     <div class="rb-sem" style="padding:6px 14px">${hist || '<div class="note">пока нет данных</div>'}</div>
      <div class="block">🖥 Сервер</div>
      <div class="big"><div style="flex:1"><b>Диск</b><div class="hint">${gb(s.disk.free)} ГБ свободно из ${gb(s.disk.total)}</div>
        <div class="pbar"><i style="width:${diskPct}%;background:${dcol}"></i></div></div>

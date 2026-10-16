@@ -183,3 +183,17 @@ class LkSnapshot(Base):
     data: Mapped[list | dict] = mapped_column(JSON)
     digest: Mapped[str] = mapped_column(String(64))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class StatDaily(Base):
+    """Дневная статистика автоотметки — переживает перезапуск (история в БД)."""
+
+    __tablename__ = "stat_daily"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    scans: Mapped[int] = mapped_column(Integer, default=0)
+    available: Mapped[int] = mapped_column(Integer, default=0)
+    marked: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    lk_down: Mapped[int] = mapped_column(Integer, default=0)
+    last_scan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

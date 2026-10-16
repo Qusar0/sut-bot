@@ -307,6 +307,7 @@ class Jobs:
         if self._att_day != d:  # новый день — забываем прошлые уведомления
             self._att_day = d
             self._att_seen = set()
+        run = {"scans": 1, "available": 0, "marked": 0, "failed": 0, "lk_down": 0}  # копим за прогон → один апдейт в БД
         auto = set(await self.lk.auto_ids())
         for tg_id in await self.lk.linked_ids():
             try:
@@ -314,6 +315,7 @@ class Jobs:
             except Exception:
                 log.warning("отметка %s: расписание ЛК недоступно", tg_id)
                 metrics.inc("автоотметка: ЛК недоступен")
+                run["lk_down"] += 1
                 continue
             for l in lessons:
                 if not (l.button_ready and not l.started):
@@ -322,12 +324,16 @@ class Jobs:
                 if key in self._att_seen:
                     continue
                 self._att_seen.add(key)
-                await self._notify_mark(tg_id, l, tg_id in auto)
+                await self._notify_mark(tg_id, l, tg_id in auto, run)
+        from bot.services.stats import bump_attendance
 
-    async def _notify_mark(self, tg_id: int, lesson, is_auto: bool) -> None:
+        await bump_attendance(d, **run)  # персист: история переживает перезапуск
+
+    async def _notify_mark(self, tg_id: int, lesson, is_auto: bool, run: dict) -> None:
         quiet = is_quiet_time()
         title = f"{escape(lesson.subject)} · {lesson.time}"
         metrics.inc("автоотметка: доступна")
+        run["available"] += 1
         if not is_auto:  # просто сообщаем, что можно отметиться
             await self.bc.send(
                 tg_id,
@@ -341,6 +347,7 @@ class Jobs:
         except Exception:
             log.warning("автоотметка %s: не удалось отметить %s", tg_id, lesson.rasp)
             metrics.inc("автоотметка: ошибка")
+            run["failed"] += 1
             await self.bc.send(
                 tg_id,
                 f"⚠️ <b>Не получилось отметиться</b>: {title}\nОтметьтесь вручную 👇",
@@ -349,6 +356,7 @@ class Jobs:
             )
             return
         metrics.inc("автоотметка: отмечено")
+        run["marked"] += 1
         await self.bc.send(tg_id, f"✅ <b>Отметил вас на паре</b>: {title}", disable_notification=quiet)
 
     # --- запуск ---
